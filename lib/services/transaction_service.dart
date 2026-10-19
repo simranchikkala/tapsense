@@ -50,23 +50,30 @@ class TransactionService {
 
   /// Today's total spend
   static Future<double> todayTotal(String userId) async {
-    final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day)
-        .toIso8601String();
-    try {
-      final data = await _client
-          .from('transactions')
-          .select('amount')
-          .eq('user_id', userId)
-          .gte('created_at', start);
-      return (data as List)
-          .fold(0.0, (sum, row) => sum + (row['amount'] as num).toDouble());
-    } catch (_) {
-      final local = await LocalDb.getAll(userId);
-      return local
-          .where((t) => t.createdAt.isAfter(
-              DateTime(today.year, today.month, today.day)))
-          .fold(0.0, (sum, t) => sum + t.amount);
+  final today = DateTime.now();
+  final start = DateTime(today.year, today.month, today.day)
+      .toIso8601String();
+  try {
+    final data = await _client
+        .from('transactions')
+        .select('amount')
+        .eq('user_id', userId)
+        .gte('created_at', start);
+    double total = 0;
+    for (final row in (data as List)) {
+      total += (row['amount'] as num).toDouble();
     }
+    return total;
+  } catch (_) {
+    final local = await LocalDb.getAll(userId);
+    double total = 0;
+    for (final t in local) {
+      if (t.createdAt.isAfter(
+          DateTime(today.year, today.month, today.day))) {
+        total += t.amount;
+      }
+    }
+    return total;
   }
+}
 }

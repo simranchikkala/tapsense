@@ -63,7 +63,7 @@ ThemeData buildTheme() => ThemeData(
       borderSide: const BorderSide(color: kAccent),
     ),
   ),
-  cardTheme: CardTheme(
+  cardTheme: CardThemeData(
     color: kSurface,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),

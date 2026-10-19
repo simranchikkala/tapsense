@@ -1,6 +1,6 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:tapsense/models/transaction.dart';
+import 'package:tapsense/models/transaction.dart' as model;
 
 class LocalDb {
   static Database? _db;
@@ -31,7 +31,7 @@ class LocalDb {
     });
   }
 
-  static Future<void> insertTransaction(Transaction tx) async {
+  static Future<void> insertTransaction(model.Transaction tx) async {
     final d = await db;
     await d.insert('transactions', {
       ...tx.toMap(),
@@ -39,19 +39,19 @@ class LocalDb {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<List<Transaction>> getUnsynced() async {
+  static Future<List<model.Transaction>> getUnsynced() async {
     final d = await db;
     final rows = await d.query('transactions',
         where: 'synced = ?', whereArgs: [0]);
-    return rows.map(Transaction.fromMap).toList();
+    return rows.map((r) => model.Transaction.fromMap(r)).toList();
   }
 
-  static Future<List<Transaction>> getAll(String userId) async {
+  static Future<List<model.Transaction>> getAll(String userId) async {
     final d = await db;
     final rows = await d.query('transactions',
         where: 'user_id = ?', whereArgs: [userId],
         orderBy: 'created_at DESC');
-    return rows.map(Transaction.fromMap).toList();
+    return rows.map((r) => model.Transaction.fromMap(r)).toList();
   }
 
   static Future<void> markSynced(String createdAt) async {
