@@ -5,21 +5,27 @@ import 'package:tapsense/services/local_db.dart';
 class TransactionService {
   static final _client = Supabase.instance.client;
 
-  /// Save transaction — tries Supabase first, falls back to SQLite
   static Future<bool> save(Transaction tx) async {
-    // Always save locally first
-    await LocalDb.insertTransaction(tx);
-
+  // Try Supabase directly first, skip local DB for now
+  try {
+    await _client
+        .from('transactions')
+        .insert(tx.toMap())
+        .timeout(const Duration(seconds: 10));
+    return true;
+  } catch (e) {
+    print('SUPABASE SAVE ERROR: $e');
+    // Fall back to local
     try {
-      await _client.from('transactions').insert(tx.toMap());
-      await LocalDb.markSynced(tx.createdAt.toIso8601String());
-      return true;
-    } catch (_) {
-      return false; // saved locally, will sync later
+      await LocalDb.insertTransaction(tx)
+          .timeout(const Duration(seconds: 5));
+    } catch (e2) {
+      print('LOCAL SAVE ERROR: $e2');
     }
+    return false;
   }
+}
 
-  /// Sync any unsynced local transactions to Supabase
   static Future<void> syncPending() async {
     final unsynced = await LocalDb.getUnsynced();
     for (final tx in unsynced) {
@@ -27,12 +33,11 @@ class TransactionService {
         await _client.from('transactions').insert(tx.toMap());
         await LocalDb.markSynced(tx.createdAt.toIso8601String());
       } catch (_) {
-        break; // no connection, try again later
+        break;
       }
     }
   }
 
-  /// Fetch recent transactions from Supabase (or local if offline)
   static Future<List<Transaction>> fetchRecent(String userId,
       {int limit = 20}) async {
     try {
@@ -48,32 +53,30 @@ class TransactionService {
     }
   }
 
-  /// Today's total spend
   static Future<double> todayTotal(String userId) async {
-  final today = DateTime.now();
-  final start = DateTime(today.year, today.month, today.day)
-      .toIso8601String();
-  try {
-    final data = await _client
-        .from('transactions')
-        .select('amount')
-        .eq('user_id', userId)
-        .gte('created_at', start);
-    double total = 0;
-    for (final row in (data as List)) {
-      total += (row['amount'] as num).toDouble();
-    }
-    return total;
-  } catch (_) {
-    final local = await LocalDb.getAll(userId);
-    double total = 0;
-    for (final t in local) {
-      if (t.createdAt.isAfter(
-          DateTime(today.year, today.month, today.day))) {
-        total += t.amount;
+    final now = DateTime.now();
+    final startLocal = DateTime(now.year, now.month, now.day);
+    final startUtc = startLocal.toUtc().toIso8601String();
+    try {
+      final data = await _client
+          .from('transactions')
+          .select('amount')
+          .eq('user_id', userId)
+          .gte('created_at', startUtc);
+      double total = 0;
+      for (final row in (data as List)) {
+        total += (row['amount'] as num).toDouble();
       }
+      return total;
+    } catch (_) {
+      final local = await LocalDb.getAll(userId);
+      double total = 0;
+      for (final t in local) {
+        if (t.createdAt.isAfter(startLocal)) {
+          total += t.amount;
+        }
+      }
+      return total;
     }
-    return total;
   }
-}
 }

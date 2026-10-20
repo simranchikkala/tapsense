@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tapsense/app/theme.dart';
 
 class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
@@ -7,7 +8,7 @@ class OnboardingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
+      backgroundColor: kBg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -19,21 +20,20 @@ class OnboardingScreen extends StatelessWidget {
                 width: 72, height: 72,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFF9C88FF)],
+                    colors: [kAccent, Color(0xFF9C88FF)],
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Icon(Icons.wallet, color: Colors.white, size: 36),
+                child: const Icon(Icons.wallet, color: kTextPrimary, size: 36),
               ),
               const SizedBox(height: 28),
               const Text('Meet TapSense',
                 style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800,
-                    color: Colors.white)),
+                    color: kTextPrimary)),
               const SizedBox(height: 12),
               const Text(
                 'Your smart wallet companion. TapSense catches the moment you pay and logs it — no bank access, no SMS reading. Everything stays on your phone.',
-                style: TextStyle(fontSize: 15, color: Color(0xFF9E9EBE),
-                    height: 1.6),
+                style: TextStyle(fontSize: 15, color: kTextSecondary, height: 1.6),
               ),
               const SizedBox(height: 40),
               _feature(Icons.bluetooth, 'Wallet pairing',
@@ -50,8 +50,8 @@ class OnboardingScreen extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () => context.go('/home'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6C63FF),
-                    foregroundColor: Colors.white,
+                    backgroundColor: kAccent,
+                    foregroundColor: kTextPrimary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
@@ -73,19 +73,19 @@ class OnboardingScreen extends StatelessWidget {
         Container(
           width: 44, height: 44,
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E),
+            color: kSurface,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: const Color(0xFF6C63FF), size: 22),
+          child: Icon(icon, color: kAccent, size: 22),
         ),
         const SizedBox(width: 16),
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: const TextStyle(fontSize: 14,
-                fontWeight: FontWeight.w700, color: Colors.white)),
+                fontWeight: FontWeight.w700, color: kTextPrimary)),
             Text(desc, style: const TextStyle(fontSize: 12,
-                color: Color(0xFF9E9EBE))),
+                color: kTextSecondary)),
           ],
         )),
       ],

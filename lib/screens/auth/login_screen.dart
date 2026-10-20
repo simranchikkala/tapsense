@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -33,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
+      backgroundColor: kBg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -45,19 +46,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: 56, height: 56,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFF9C88FF)],
+                    colors: [kAccent, Color(0xFF9C88FF)],
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.wallet, color: Colors.white, size: 28),
+                child: const Icon(Icons.wallet, color: kTextPrimary, size: 28),
               ),
               const SizedBox(height: 24),
               const Text('Welcome back',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800,
-                    color: Colors.white)),
+                    color: kTextPrimary)),
               const SizedBox(height: 6),
               const Text('Sign in to TapSense',
-                style: TextStyle(fontSize: 15, color: Color(0xFF9E9EBE))),
+                style: TextStyle(fontSize: 15, color: kTextSecondary)),
               const SizedBox(height: 40),
               _field('Email', _emailCtrl, false),
               const SizedBox(height: 14),
@@ -65,22 +66,22 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 10),
               if (_error != null)
                 Text(_error!, style: const TextStyle(
-                    color: Color(0xFFFF6B6B), fontSize: 13)),
+                    color: kError, fontSize: 13)),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity, height: 52,
                 child: ElevatedButton(
                   onPressed: _loading ? null : _login,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6C63FF),
-                    foregroundColor: Colors.white,
+                    backgroundColor: kAccent,
+                    foregroundColor: kTextPrimary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
                   child: _loading
                       ? const SizedBox(width: 20, height: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: kTextPrimary))
                       : const Text('Sign In',
                           style: TextStyle(fontSize: 16,
                               fontWeight: FontWeight.w700)),
@@ -92,9 +93,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   onTap: () => context.go('/signup'),
                   child: const Text.rich(TextSpan(children: [
                     TextSpan(text: "Don't have an account? ",
-                        style: TextStyle(color: Color(0xFF9E9EBE))),
+                        style: TextStyle(color: kTextSecondary)),
                     TextSpan(text: 'Sign up',
-                        style: TextStyle(color: Color(0xFF6C63FF),
+                        style: TextStyle(color: kAccent,
                             fontWeight: FontWeight.w700)),
                   ])),
                 ),
@@ -112,26 +113,26 @@ class _LoginScreenState extends State<LoginScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(fontSize: 13,
-            fontWeight: FontWeight.w600, color: Color(0xFF9E9EBE))),
+            fontWeight: FontWeight.w600, color: kTextSecondary)),
         const SizedBox(height: 6),
         TextField(
           controller: ctrl,
           obscureText: obscure,
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: kTextPrimary),
           decoration: InputDecoration(
             filled: true,
-            fillColor: const Color(0xFF1A1A2E),
+            fillColor: kSurface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
+              borderSide: const BorderSide(color: kBorder),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
+              borderSide: const BorderSide(color: kBorder),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF6C63FF)),
+              borderSide: const BorderSide(color: kAccent),
             ),
           ),
         ),

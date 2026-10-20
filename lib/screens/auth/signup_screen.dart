@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/services/auth_service.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -35,7 +36,7 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
+      backgroundColor: kBg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -45,10 +46,10 @@ class _SignupScreenState extends State<SignupScreen> {
               const Spacer(),
               const Text('Create account',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800,
-                    color: Colors.white)),
+                    color: kTextPrimary)),
               const SizedBox(height: 6),
               const Text('Start tracking smarter',
-                style: TextStyle(fontSize: 15, color: Color(0xFF9E9EBE))),
+                style: TextStyle(fontSize: 15, color: kTextSecondary)),
               const SizedBox(height: 40),
               _field('Your name', _nameCtrl, false),
               const SizedBox(height: 14),
@@ -58,22 +59,22 @@ class _SignupScreenState extends State<SignupScreen> {
               const SizedBox(height: 10),
               if (_error != null)
                 Text(_error!, style: const TextStyle(
-                    color: Color(0xFFFF6B6B), fontSize: 13)),
+                    color: kError, fontSize: 13)),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity, height: 52,
                 child: ElevatedButton(
                   onPressed: _loading ? null : _signup,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6C63FF),
-                    foregroundColor: Colors.white,
+                    backgroundColor: kAccent,
+                    foregroundColor: kTextPrimary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
                   child: _loading
                       ? const SizedBox(width: 20, height: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: kTextPrimary))
                       : const Text('Create Account',
                           style: TextStyle(fontSize: 16,
                               fontWeight: FontWeight.w700)),
@@ -85,9 +86,9 @@ class _SignupScreenState extends State<SignupScreen> {
                   onTap: () => context.go('/login'),
                   child: const Text.rich(TextSpan(children: [
                     TextSpan(text: 'Already have an account? ',
-                        style: TextStyle(color: Color(0xFF9E9EBE))),
+                        style: TextStyle(color: kTextSecondary)),
                     TextSpan(text: 'Sign in',
-                        style: TextStyle(color: Color(0xFF6C63FF),
+                        style: TextStyle(color: kAccent,
                             fontWeight: FontWeight.w700)),
                   ])),
                 ),
@@ -105,26 +106,26 @@ class _SignupScreenState extends State<SignupScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(fontSize: 13,
-            fontWeight: FontWeight.w600, color: Color(0xFF9E9EBE))),
+            fontWeight: FontWeight.w600, color: kTextSecondary)),
         const SizedBox(height: 6),
         TextField(
           controller: ctrl,
           obscureText: obscure,
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: kTextPrimary),
           decoration: InputDecoration(
             filled: true,
-            fillColor: const Color(0xFF1A1A2E),
+            fillColor: kSurface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
+              borderSide: const BorderSide(color: kBorder),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
+              borderSide: const BorderSide(color: kBorder),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF6C63FF)),
+              borderSide: const BorderSide(color: kAccent),
             ),
           ),
         ),

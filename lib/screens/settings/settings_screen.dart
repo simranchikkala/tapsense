@@ -70,34 +70,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
-    try {
-      final profile = await Supabase.instance.client
-          .from('profiles').select().eq('id', userId).single();
-      final cats = await Supabase.instance.client
-          .from('categories').select().eq('user_id', userId);
+  // Replace the _load() method with this:
+Future<void> _load() async {
+  final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
+  try {
+    final profile = await Supabase.instance.client
+        .from('profiles').select().eq('id', userId).single();
+    final catsRaw = await Supabase.instance.client
+        .from('categories').select().eq('user_id', userId);
 
-      if (mounted) {
-        setState(() {
-          _nameCtrl.text   = profile['name']   ?? '';
-          _incomeCtrl.text = profile['income']?.toString() ?? '';
-          _budgetCtrl.text = profile['budget']?.toString() ?? '';
-          _currency        = profile['currency'] ?? 'SGD';
-          _categories = (cats as List)
-              .map((c) => {
-                    'name':   c['name'] as String,
-                    'color':  c['color'] as String? ?? '#FF8C42',
-                    'budget': c['budget'] ?? 0,
-                  })
-              .toList();
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    List<Map<String, dynamic>> cats = (catsRaw as List)
+        .map((c) => {
+              'name':   c['name'] as String,
+              'color':  c['color'] as String? ?? '#FF8C42',
+              'budget': c['budget'] ?? 0,
+            })
+        .toList();
+
+    // If no categories in Supabase, seed from hardcoded defaults
+    if (cats.isEmpty) {
+      cats = _defaultCategories();
+      // Write them to Supabase so they persist
+      await Supabase.instance.client.from('categories').insert(
+        cats.map((c) => {
+          'user_id': userId,
+          'name':    c['name'],
+          'color':   c['color'],
+          'budget':  0,
+        }).toList(),
+      );
+    }
+
+    if (mounted) {
+      setState(() {
+        _nameCtrl.text   = profile['name']   ?? '';
+        _incomeCtrl.text = profile['income']?.toString() ?? '';
+        _budgetCtrl.text = profile['budget']?.toString() ?? '';
+        _currency        = profile['currency'] ?? 'SGD';
+        _categories      = cats;
+        _loading         = false;
+      });
+    }
+  } catch (_) {
+    // Profile may not exist yet — still show default categories
+    if (mounted) {
+      setState(() {
+        _categories = _defaultCategories();
+        _loading    = false;
+      });
     }
   }
+}
+
+// Add this helper method to _SettingsScreenState:
+List<Map<String, dynamic>> _defaultCategories() => [
+  {'name': 'Food',          'color': '#FF8C42', 'budget': 0},
+  {'name': 'Transport',     'color': '#22C55E', 'budget': 0},
+  {'name': 'Shopping',      'color': '#A78BFA', 'budget': 0},
+  {'name': 'Groceries',     'color': '#3B82F6', 'budget': 0},
+  {'name': 'Health',        'color': '#F43F5E', 'budget': 0},
+  {'name': 'Bills',         'color': '#F59E0B', 'budget': 0},
+  {'name': 'Entertainment', 'color': '#06B6D4', 'budget': 0},
+  {'name': 'Other',         'color': '#64748B', 'budget': 0},
+];
 
   // 50-30-20 calculation
   double get _income => double.tryParse(_incomeCtrl.text) ?? 0;

@@ -19,13 +19,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<Transaction> _recent = [];
   double _todayTotal = 0;
+  int _todayCount = 0;
   bool _loading = true;
   String _userName = '';
+  String _currencyCode = 'SGD';
 
   @override
   void initState() {
     super.initState();
-    _load();
     walletBluetooth.events.listen((event) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -36,24 +37,63 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _load();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     final user = Supabase.instance.client.auth.currentUser;
     final userId = user?.id ?? '';
     _userName = user?.userMetadata?['name'] ?? 'there';
 
+    // Load currency from profile
+    try {
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select('currency')
+          .eq('id', userId)
+          .single();
+      _currencyCode = profile['currency'] ?? 'SGD';
+    } catch (_) {}
+
     final results = await Future.wait([
       TransactionService.fetchRecent(userId),
       TransactionService.todayTotal(userId),
     ]);
 
+    final recent = results[0] as List<Transaction>;
+    final total = results[1] as double;
+
+    // Count today's transactions
+    final today = DateTime.now();
+    final todayCount = recent.where((tx) {
+      final d = tx.createdAt.toLocal();
+      return d.year == today.year &&
+             d.month == today.month &&
+             d.day == today.day;
+    }).length;
+
     if (mounted) {
       setState(() {
-        _recent  = results[0] as List<Transaction>;
-        _todayTotal = results[1] as double;
-        _loading = false;
+        _recent     = recent;
+        _todayTotal = total;
+        _todayCount = todayCount;
+        _loading    = false;
       });
     }
+  }
+
+  String _symbol(String code) {
+    const map = {
+      'SGD': 'S\$', 'USD': '\$',  'EUR': '€',  'GBP': '£',
+      'INR': '₹',   'MYR': 'RM',  'IDR': 'Rp', 'THB': '฿',
+      'PHP': '₱',   'AUD': 'A\$', 'JPY': '¥',  'CNY': '¥',
+      'HKD': 'HK\$',
+    };
+    return map[code] ?? code;
   }
 
   @override
@@ -121,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: kTextSecondary, fontSize: 13)),
                         const SizedBox(height: 8),
                         Text(
-                          'S\$ ${_todayTotal.toStringAsFixed(2)}',
+                          '${_symbol(_currencyCode)} ${_todayTotal.toStringAsFixed(2)}',
                           style: const TextStyle(
                             color: kTextPrimary, fontSize: 36,
                             fontWeight: FontWeight.w800,
@@ -130,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 16),
                         Row(children: [
                           _StatPill(
-                            label: '${_recent.length} transactions',
+                            label: '$_todayCount transaction${_todayCount == 1 ? '' : 's'} today',
                             icon: Icons.receipt_long,
                           ),
                         ]),
@@ -281,7 +321,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ]),
                     )
                   else
-                    ...(_recent.take(10).map((tx) => _TxTile(tx: tx))),
+                    ...(_recent.take(10).map((tx) =>
+                        _TxTile(tx: tx, symbol: _symbol(_currencyCode)))),
                 ],
               ),
       ),
@@ -356,7 +397,8 @@ class _WalletCard extends StatelessWidget {
 // ── Transaction tile ──────────────────────────────────────────────────────────
 class _TxTile extends StatelessWidget {
   final Transaction tx;
-  const _TxTile({required this.tx});
+  final String symbol;
+  const _TxTile({required this.tx, required this.symbol});
 
   @override
   Widget build(BuildContext context) {
@@ -395,7 +437,7 @@ class _TxTile extends StatelessWidget {
           ],
         )),
         Text(
-          'S\$ ${tx.amount.toStringAsFixed(2)}',
+          '$symbol ${tx.amount.toStringAsFixed(2)}',
           style: const TextStyle(
             color: kTextPrimary, fontWeight: FontWeight.w700,
             fontSize: 15),

@@ -6,8 +6,9 @@ class Transaction {
   final String? merchantName;
   final String? merchantUen;
   final String? note;
-  final String triggerType; // manual | qr_scan | card_removed | button_press
+  final String triggerType;
   final String? rawQr;
+  final String? paymentMode;
   final DateTime createdAt;
 
   Transaction({
@@ -20,6 +21,7 @@ class Transaction {
     this.note,
     required this.triggerType,
     this.rawQr,
+    this.paymentMode,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -33,6 +35,7 @@ class Transaction {
     if (note != null) 'note': note,
     'trigger_type': triggerType,
     if (rawQr != null) 'raw_qr': rawQr,
+    if (paymentMode != null) 'payment_mode': paymentMode,
     'created_at': createdAt.toIso8601String(),
   };
 
@@ -46,6 +49,7 @@ class Transaction {
     note: m['note'],
     triggerType: m['trigger_type'],
     rawQr: m['raw_qr'],
+    paymentMode: m['payment_mode'],
     createdAt: DateTime.parse(m['created_at']),
   );
 }

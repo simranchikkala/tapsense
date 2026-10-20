@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/services/bluetooth_service.dart';
 
 class PairingScreen extends StatefulWidget {
@@ -53,26 +54,26 @@ class _PairingScreenState extends State<PairingScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
+        backgroundColor: kSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 8),
           Container(
             width: 64, height: 64,
             decoration: BoxDecoration(
-              color: const Color(0xFF22C55E).withOpacity(0.15),
+              color: kSuccess.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check, color: Color(0xFF22C55E), size: 32),
+            child: const Icon(Icons.check, color: kSuccess, size: 32),
           ),
           const SizedBox(height: 16),
           Text('Connected to $name',
-            style: const TextStyle(color: Colors.white,
+            style: const TextStyle(color: kTextPrimary,
                 fontWeight: FontWeight.w700, fontSize: 16),
             textAlign: TextAlign.center),
           const SizedBox(height: 8),
           const Text('Your TapSense wallet is ready',
-            style: TextStyle(color: Color(0xFF9E9EBE), fontSize: 13),
+            style: TextStyle(color: kTextSecondary, fontSize: 13),
             textAlign: TextAlign.center),
           const SizedBox(height: 20),
           SizedBox(
@@ -83,8 +84,8 @@ class _PairingScreenState extends State<PairingScreen> {
                 context.go('/home');
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6C63FF),
-                foregroundColor: Colors.white,
+                backgroundColor: kAccent,
+                foregroundColor: kTextPrimary,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
               ),
@@ -100,7 +101,7 @@ class _PairingScreenState extends State<PairingScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Could not connect. Try again.'),
-        backgroundColor: Color(0xFFFF6B6B),
+        backgroundColor: kError,
       ),
     );
   }
@@ -108,13 +109,13 @@ class _PairingScreenState extends State<PairingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
+      backgroundColor: kBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F0F1A),
+        backgroundColor: kBg,
         title: const Text('Pair Wallet',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: kTextPrimary, fontWeight: FontWeight.w700)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: kTextPrimary),
           onPressed: () => context.go('/home'),
         ),
       ),
@@ -130,41 +131,41 @@ class _PairingScreenState extends State<PairingScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    const Color(0xFF6C63FF).withOpacity(0.15),
-                    const Color(0xFF9C88FF).withOpacity(0.05),
+                    kAccent.withOpacity(0.15),
+                    kAccent.withOpacity(0.05),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF6C63FF).withOpacity(0.3)),
+                border: Border.all(color: kAccent.withOpacity(0.3)),
               ),
               child: Row(children: [
                 const Icon(Icons.bluetooth_searching,
-                    color: Color(0xFF6C63FF), size: 32),
+                    color: kAccent, size: 32),
                 const SizedBox(width: 16),
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Looking for your wallet',
-                      style: TextStyle(color: Colors.white,
+                      style: TextStyle(color: kTextPrimary,
                           fontWeight: FontWeight.w700, fontSize: 15)),
                     const SizedBox(height: 4),
                     Text(
                       _scanning ? 'Scanning for nearby devices...'
                                 : 'Scan complete — ${_results.length} device(s) found',
-                      style: const TextStyle(color: Color(0xFF9E9EBE),
+                      style: const TextStyle(color: kTextSecondary,
                           fontSize: 12)),
                   ],
                 )),
                 if (_scanning)
                   const SizedBox(width: 20, height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Color(0xFF6C63FF))),
+                        strokeWidth: 2, color: kAccent)),
               ]),
             ),
 
             const SizedBox(height: 24),
             const Text('Nearby Devices',
-              style: TextStyle(color: Color(0xFF9E9EBE),
+              style: TextStyle(color: kTextSecondary,
                   fontSize: 12, fontWeight: FontWeight.w600,
                   letterSpacing: 1)),
             const SizedBox(height: 12),
@@ -177,14 +178,14 @@ class _PairingScreenState extends State<PairingScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.bluetooth_disabled,
-                          color: const Color(0xFF9E9EBE).withOpacity(0.4),
+                          color: kTextSecondary.withOpacity(0.4),
                           size: 48),
                         const SizedBox(height: 12),
                         const Text('No devices found',
-                          style: TextStyle(color: Color(0xFF9E9EBE))),
+                          style: TextStyle(color: kTextSecondary)),
                         const SizedBox(height: 4),
                         const Text('Make sure your wallet is turned on',
-                          style: TextStyle(color: Color(0xFF6B6B8A),
+                          style: TextStyle(color: kTextMuted,
                               fontSize: 12)),
                       ],
                     ),
@@ -200,38 +201,36 @@ class _PairingScreenState extends State<PairingScreen> {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1A1A2E),
+                          color: kSurface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: const Color(0xFF2A2A4A)),
+                          border: Border.all(color: kBorder),
                         ),
                         child: ListTile(
                           leading: Container(
                             width: 40, height: 40,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6C63FF).withOpacity(0.15),
+                              color: kAccent.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(Icons.wallet,
-                                color: Color(0xFF6C63FF), size: 20),
+                                color: kAccent, size: 20),
                           ),
                           title: Text(name,
-                            style: const TextStyle(color: Colors.white,
+                            style: const TextStyle(color: kTextPrimary,
                                 fontWeight: FontWeight.w600, fontSize: 14)),
                           subtitle: Text(r.device.remoteId.str,
-                            style: const TextStyle(color: Color(0xFF6B6B8A),
+                            style: const TextStyle(color: kTextMuted,
                                 fontSize: 11)),
                           trailing: isConnecting
                               ? const SizedBox(width: 20, height: 20,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Color(0xFF6C63FF)))
+                                      strokeWidth: 2, color: kAccent))
                               : ElevatedButton(
                                   onPressed: _connecting ? null
                                       : () => _connect(r.device),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF6C63FF),
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: kAccent,
+                                    foregroundColor: kTextPrimary,
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 16, vertical: 8),
                                     shape: RoundedRectangleBorder(
@@ -256,8 +255,8 @@ class _PairingScreenState extends State<PairingScreen> {
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Scan Again'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF6C63FF),
-                    side: const BorderSide(color: Color(0xFF6C63FF)),
+                    foregroundColor: kAccent,
+                    side: const BorderSide(color: kAccent),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
