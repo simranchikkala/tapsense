@@ -14,10 +14,11 @@
     <!-- Location needed for BLE scan on older Android -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
+fl
+    
     <!-- Camera for QR scanning (Day 3) -->
     <uses-permission android:name="android.permission.CAMERA" />
-
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="tapsense"
         android:name="${applicationName}"

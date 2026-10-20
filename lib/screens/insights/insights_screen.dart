@@ -44,23 +44,28 @@ class _InsightsScreenState extends State<InsightsScreen> {
     await _loadDigest();
   }
 
-  double get _weekTotal {
+  // ── Total spend this week (absolute value of debits only) ──────────────────
+  double get _weekSpend {
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
     return _txs
-        .where((t) => t.createdAt.isAfter(cutoff))
-        .fold(0.0, (s, t) => s + t.amount);
+        .where((t) => t.createdAt.isAfter(cutoff) && t.amount < 0)
+        .fold(0.0, (s, t) => s + t.amount.abs());
   }
 
+  // ── Category breakdown: absolute spend per category (debits only) ──────────
   Map<String, double> get _byCategory {
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
     final map = <String, double>{};
-    for (final t in _txs.where((t) => t.createdAt.isAfter(cutoff))) {
-      map[t.categoryId] = (map[t.categoryId] ?? 0) + t.amount;
+    for (final t in _txs.where(
+        (t) => t.createdAt.isAfter(cutoff) && t.amount < 0)) {
+      map[t.categoryId] = (map[t.categoryId] ?? 0) + t.amount.abs();
     }
+    // Sort descending by spend
     return Map.fromEntries(
         map.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));
   }
 
+  // ── Daily spend (absolute, debits only) ───────────────────────────────────
   List<double> get _dailySpend {
     final now = DateTime.now();
     return List.generate(7, (i) {
@@ -68,10 +73,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
           .subtract(Duration(days: 6 - i));
       return _txs
           .where((t) =>
+              t.amount < 0 &&
               t.createdAt.year == day.year &&
               t.createdAt.month == day.month &&
               t.createdAt.day == day.day)
-          .fold(0.0, (s, t) => s + t.amount);
+          .fold(0.0, (s, t) => s + t.amount.abs());
     });
   }
 
@@ -122,7 +128,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                             style: TextStyle(
                                 color: kTextSecondary, fontSize: 13)),
                         const SizedBox(height: 6),
-                        Text('S\$ ${_weekTotal.toStringAsFixed(2)}',
+                        Text('S\$ ${_weekSpend.toStringAsFixed(2)}',
                             style: const TextStyle(
                                 color: kTextPrimary,
                                 fontSize: 32,
@@ -315,7 +321,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         border: Border.all(color: kBorder),
                       ),
                       child: const Center(
-                          child: Text('No data yet',
+                          child: Text('No spend data yet',
                               style: TextStyle(color: kTextMuted))),
                     )
                   else ...[
@@ -335,14 +341,15 @@ class _InsightsScreenState extends State<InsightsScreen> {
                             .asMap()
                             .entries
                             .map((entry) {
-                          final i = entry.key;
+                          final i   = entry.key;
                           final cat = categoryById(entry.value.key);
-                          final pct = _weekTotal > 0
-                              ? entry.value.value / _weekTotal * 100
+                          // Use absolute spend values — _weekSpend is already abs
+                          final pct = _weekSpend > 0
+                              ? entry.value.value / _weekSpend * 100
                               : 0.0;
                           final isTouched = i == _touchedIndex;
                           return PieChartSectionData(
-                            value: entry.value.value,
+                            value: entry.value.value, // always positive
                             color: cat.color,
                             radius: isTouched ? 60 : 50,
                             title: '${pct.toStringAsFixed(0)}%',
@@ -359,8 +366,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
                     ..._byCategory.entries.map((e) {
                       final cat = categoryById(e.key);
-                      final pct = _weekTotal > 0
-                          ? e.value / _weekTotal * 100
+                      final pct = _weekSpend > 0
+                          ? e.value / _weekSpend * 100
                           : 0.0;
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),

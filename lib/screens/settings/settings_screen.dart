@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/services/auth_service.dart';
+import 'package:tapsense/widgets/rename_wallet_dialog.dart';
 
 // ── Currency list ─────────────────────────────────────────────────────────────
 class CurrencyOption {
@@ -42,10 +43,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _goalNameCtrl = TextEditingController();
   final _goalAmtCtrl  = TextEditingController();
 
-  String _currency = 'SGD';
+  String _currency  = 'SGD';
   String _goalMonth = '';
-  bool _saving = false;
+  bool _saving  = false;
   bool _loading = true;
+
+  // Wallet (for rename)
+  Map<String, dynamic>? _wallet;
 
   // Categories
   List<Map<String, dynamic>> _categories = [];
@@ -70,71 +74,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _load();
   }
 
-  // Replace the _load() method with this:
-Future<void> _load() async {
-  final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
-  try {
-    final profile = await Supabase.instance.client
-        .from('profiles').select().eq('id', userId).single();
-    final catsRaw = await Supabase.instance.client
-        .from('categories').select().eq('user_id', userId);
+  Future<void> _load() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    try {
+      final profile = await Supabase.instance.client
+          .from('profiles').select().eq('id', userId).single();
+      final catsRaw = await Supabase.instance.client
+          .from('categories').select().eq('user_id', userId);
 
-    List<Map<String, dynamic>> cats = (catsRaw as List)
-        .map((c) => {
-              'name':   c['name'] as String,
-              'color':  c['color'] as String? ?? '#FF8C42',
-              'budget': c['budget'] ?? 0,
-            })
-        .toList();
+      List<Map<String, dynamic>> cats = (catsRaw as List)
+          .map((c) => {
+                'name':   c['name'] as String,
+                'color':  c['color'] as String? ?? '#FF8C42',
+                'budget': c['budget'] ?? 0,
+              })
+          .toList();
 
-    // If no categories in Supabase, seed from hardcoded defaults
-    if (cats.isEmpty) {
-      cats = _defaultCategories();
-      // Write them to Supabase so they persist
-      await Supabase.instance.client.from('categories').insert(
-        cats.map((c) => {
-          'user_id': userId,
-          'name':    c['name'],
-          'color':   c['color'],
-          'budget':  0,
-        }).toList(),
-      );
-    }
+      if (cats.isEmpty) {
+        cats = _defaultCategories();
+        await Supabase.instance.client.from('categories').insert(
+          cats.map((c) => {
+            'user_id': userId,
+            'name':    c['name'],
+            'color':   c['color'],
+            'budget':  0,
+          }).toList(),
+        );
+      }
 
-    if (mounted) {
-      setState(() {
-        _nameCtrl.text   = profile['name']   ?? '';
-        _incomeCtrl.text = profile['income']?.toString() ?? '';
-        _budgetCtrl.text = profile['budget']?.toString() ?? '';
-        _currency        = profile['currency'] ?? 'SGD';
-        _categories      = cats;
-        _loading         = false;
-      });
-    }
-  } catch (_) {
-    // Profile may not exist yet — still show default categories
-    if (mounted) {
-      setState(() {
-        _categories = _defaultCategories();
-        _loading    = false;
-      });
+      // Load wallet for rename feature
+      final walletRes = await Supabase.instance.client
+          .from('wallets')
+          .select()
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle();
+
+      if (mounted) {
+        setState(() {
+          _nameCtrl.text   = profile['name']   ?? '';
+          _incomeCtrl.text = profile['income']?.toString() ?? '';
+          _budgetCtrl.text = profile['budget']?.toString() ?? '';
+          _currency        = profile['currency'] ?? 'SGD';
+          _categories      = cats;
+          _wallet          = walletRes as Map<String, dynamic>?;
+          _loading         = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _categories = _defaultCategories();
+          _loading    = false;
+        });
+      }
     }
   }
-}
 
-// Add this helper method to _SettingsScreenState:
-List<Map<String, dynamic>> _defaultCategories() => [
-  {'name': 'Food',          'color': '#FF8C42', 'budget': 0},
-  {'name': 'Transport',     'color': '#22C55E', 'budget': 0},
-  {'name': 'Shopping',      'color': '#A78BFA', 'budget': 0},
-  {'name': 'Groceries',     'color': '#3B82F6', 'budget': 0},
-  {'name': 'Health',        'color': '#F43F5E', 'budget': 0},
-  {'name': 'Bills',         'color': '#F59E0B', 'budget': 0},
-  {'name': 'Entertainment', 'color': '#06B6D4', 'budget': 0},
-  {'name': 'Other',         'color': '#64748B', 'budget': 0},
-];
+  List<Map<String, dynamic>> _defaultCategories() => [
+    {'name': 'Food',          'color': '#FF8C42', 'budget': 0},
+    {'name': 'Transport',     'color': '#22C55E', 'budget': 0},
+    {'name': 'Shopping',      'color': '#A78BFA', 'budget': 0},
+    {'name': 'Groceries',     'color': '#3B82F6', 'budget': 0},
+    {'name': 'Health',        'color': '#F43F5E', 'budget': 0},
+    {'name': 'Bills',         'color': '#F59E0B', 'budget': 0},
+    {'name': 'Entertainment', 'color': '#06B6D4', 'budget': 0},
+    {'name': 'Other',         'color': '#64748B', 'budget': 0},
+  ];
 
-  // 50-30-20 calculation
   double get _income => double.tryParse(_incomeCtrl.text) ?? 0;
   String get _symbol =>
       kCurrencies.firstWhere((c) => c.code == _currency,
@@ -155,7 +162,6 @@ List<Map<String, dynamic>> _defaultCategories() => [
     final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
 
     try {
-      // Update profile
       await Supabase.instance.client.from('profiles').update({
         'name':     _nameCtrl.text.trim(),
         'income':   int.tryParse(_incomeCtrl.text) ?? 0,
@@ -163,7 +169,6 @@ List<Map<String, dynamic>> _defaultCategories() => [
         'currency': _currency,
       }).eq('id', userId);
 
-      // Sync categories
       await Supabase.instance.client
           .from('categories').delete().eq('user_id', userId);
       if (_categories.isNotEmpty) {
@@ -214,12 +219,21 @@ List<Map<String, dynamic>> _defaultCategories() => [
 
   @override
   Widget build(BuildContext context) {
+    final dark    = Theme.of(context).brightness == Brightness.dark;
+    final bg      = dark ? kBg      : kBgLight;
+    final surface = dark ? kSurface : kSurfaceLight;
+    final border  = dark ? kBorder  : kBorderLight;
+    final textP   = dark ? kTextPrimary    : kTextPrimaryLight;
+    final textS   = dark ? kTextSecondary  : kTextSecondaryLight;
+    final textM   = dark ? kTextMuted      : kTextMutedLight;
+
     return Scaffold(
-      backgroundColor: kBg,
+      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('Settings'),
+        backgroundColor: bg,
+        title: Text('Settings', style: TextStyle(color: textP)),
         leading: BackButton(
-            color: kTextPrimary,
+            color: textP,
             onPressed: () => Navigator.pop(context)),
         actions: [
           TextButton(
@@ -235,21 +249,27 @@ List<Map<String, dynamic>> _defaultCategories() => [
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kAccent))
+          ? Center(child: CircularProgressIndicator(color: kAccent))
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 60),
               children: [
 
                 // ── Profile ─────────────────────────────────────
-                _SectionHeader('Profile'),
-                _Field('Name', _nameCtrl, hint: 'Your name'),
+                _SectionHeader('Profile', textS),
+                _Field('Name', _nameCtrl, hint: 'Your name',
+                    surface: surface, border: border,
+                    textP: textP, textM: textM),
                 const SizedBox(height: 12),
                 _Field('Monthly Income', _incomeCtrl,
                     hint: '0.00', numeric: true,
-                    onChanged: (_) => setState(() {})),
+                    onChanged: (_) => setState(() {}),
+                    surface: surface, border: border,
+                    textP: textP, textM: textM),
                 const SizedBox(height: 12),
                 _Field('Monthly Budget', _budgetCtrl,
-                    hint: '0.00', numeric: true),
+                    hint: '0.00', numeric: true,
+                    surface: surface, border: border,
+                    textP: textP, textM: textM),
 
                 // 50-30-20 tip
                 if (_income > 0) ...[
@@ -273,11 +293,14 @@ List<Map<String, dynamic>> _defaultCategories() => [
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _TipTile('Needs 50%',
-                                '$_symbol${(_income * 0.5).toStringAsFixed(0)}'),
+                                '$_symbol${(_income * 0.5).toStringAsFixed(0)}',
+                                textP, textM),
                             _TipTile('Wants 30%',
-                                '$_symbol${(_income * 0.3).toStringAsFixed(0)}'),
+                                '$_symbol${(_income * 0.3).toStringAsFixed(0)}',
+                                textP, textM),
                             _TipTile('Savings 20%',
-                                '$_symbol${(_income * 0.2).toStringAsFixed(0)}'),
+                                '$_symbol${(_income * 0.2).toStringAsFixed(0)}',
+                                textP, textM),
                           ],
                         ),
                       ],
@@ -286,26 +309,26 @@ List<Map<String, dynamic>> _defaultCategories() => [
                 ],
 
                 // ── Currency ─────────────────────────────────────
-                _SectionHeader('Currency'),
+                _SectionHeader('Currency', textS),
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 4),
                   decoration: BoxDecoration(
-                    color: kSurface,
+                    color: surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: kBorder),
+                    border: Border.all(color: border),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _currency,
-                      dropdownColor: kSurface,
-                      style: const TextStyle(color: kTextPrimary),
+                      dropdownColor: surface,
+                      style: TextStyle(color: textP),
                       isExpanded: true,
                       items: kCurrencies.map((c) => DropdownMenuItem(
                         value: c.code,
                         child: Text('${c.symbol}  ${c.name} (${c.code})',
-                          style: const TextStyle(
-                            color: kTextPrimary, fontSize: 14)),
+                          style: TextStyle(
+                            color: textP, fontSize: 14)),
                       )).toList(),
                       onChanged: (v) =>
                           setState(() => _currency = v ?? 'SGD'),
@@ -314,32 +337,36 @@ List<Map<String, dynamic>> _defaultCategories() => [
                 ),
 
                 // ── Savings Goal ─────────────────────────────────
-                _SectionHeader('Savings Goal'),
+                _SectionHeader('Savings Goal', textS),
                 _Field('Goal Name', _goalNameCtrl,
-                    hint: 'e.g. New laptop'),
+                    hint: 'e.g. New laptop',
+                    surface: surface, border: border,
+                    textP: textP, textM: textM),
                 const SizedBox(height: 12),
                 _Field('Target Amount', _goalAmtCtrl,
-                    hint: '0.00', numeric: true),
+                    hint: '0.00', numeric: true,
+                    surface: surface, border: border,
+                    textP: textP, textM: textM),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 4),
                   decoration: BoxDecoration(
-                    color: kSurface,
+                    color: surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: kBorder),
+                    border: Border.all(color: border),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _goalMonth,
-                      dropdownColor: kSurface,
+                      dropdownColor: surface,
                       isExpanded: true,
                       items: _months.map((m) => DropdownMenuItem(
                         value: m,
                         child: Text(
                           m.isEmpty ? 'Target month (optional)' : m,
                           style: TextStyle(
-                            color: m.isEmpty ? kTextMuted : kTextPrimary,
+                            color: m.isEmpty ? textM : textP,
                             fontSize: 14)),
                       )).toList(),
                       onChanged: (v) =>
@@ -349,19 +376,18 @@ List<Map<String, dynamic>> _defaultCategories() => [
                 ),
 
                 // ── Categories ───────────────────────────────────
-                _SectionHeader('Categories'),
+                _SectionHeader('Categories', textS),
 
-                // Add new category
                 Row(children: [
                   Expanded(
                     child: TextField(
                       controller: _newCatCtrl,
-                      style: const TextStyle(color: kTextPrimary),
+                      style: TextStyle(color: textP),
                       decoration: InputDecoration(
                         hintText: 'New category name',
-                        hintStyle: const TextStyle(color: kTextMuted),
+                        hintStyle: TextStyle(color: textM),
                         filled: true,
-                        fillColor: kSurface,
+                        fillColor: surface,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
@@ -376,6 +402,7 @@ List<Map<String, dynamic>> _defaultCategories() => [
                     onPressed: _addCategory,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kAccent,
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(
@@ -385,7 +412,6 @@ List<Map<String, dynamic>> _defaultCategories() => [
                   ),
                 ]),
 
-                // Colour picker for new category
                 const SizedBox(height: 10),
                 Wrap(spacing: 8, runSpacing: 8,
                   children: _colorOptions.map((hex) {
@@ -410,7 +436,6 @@ List<Map<String, dynamic>> _defaultCategories() => [
 
                 const SizedBox(height: 16),
 
-                // Category list
                 ..._categories.asMap().entries.map((entry) {
                   final i = entry.key;
                   final cat = entry.value;
@@ -422,9 +447,9 @@ List<Map<String, dynamic>> _defaultCategories() => [
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: kSurface,
+                      color: surface,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: kBorder),
+                      border: Border.all(color: border),
                     ),
                     child: Row(children: [
                       Container(
@@ -434,18 +459,18 @@ List<Map<String, dynamic>> _defaultCategories() => [
                       ),
                       const SizedBox(width: 10),
                       Expanded(child: Text(cat['name'],
-                        style: const TextStyle(
-                          color: kTextPrimary, fontSize: 14))),
+                        style: TextStyle(
+                          color: textP, fontSize: 14))),
                       SizedBox(
                         width: 80,
                         child: TextField(
                           keyboardType: TextInputType.number,
-                          style: const TextStyle(
-                            color: kTextPrimary, fontSize: 13),
-                          decoration: const InputDecoration(
+                          style: TextStyle(
+                            color: textP, fontSize: 13),
+                          decoration: InputDecoration(
                             hintText: 'budget',
                             hintStyle: TextStyle(
-                              color: kTextMuted, fontSize: 12),
+                              color: textM, fontSize: 12),
                             border: InputBorder.none,
                             isDense: true,
                           ),
@@ -456,8 +481,8 @@ List<Map<String, dynamic>> _defaultCategories() => [
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close,
-                            color: kTextMuted, size: 18),
+                        icon: Icon(Icons.close,
+                            color: textM, size: 18),
                         onPressed: () => setState(
                             () => _categories.removeAt(i)),
                         padding: EdgeInsets.zero,
@@ -467,27 +492,132 @@ List<Map<String, dynamic>> _defaultCategories() => [
                   );
                 }),
 
-                // ── Danger zone ──────────────────────────────────
-                _SectionHeader('Danger Zone'),
-                OutlinedButton.icon(
-                  onPressed: () => _confirmAction(
-                    'Sign out?',
-                    'You will need to log in again.',
-                    () async {
-                      await AuthService.signOut();
-                      if (context.mounted) context.go('/login');
-                    },
+                // ── Appearance ───────────────────────────────────
+                _SectionHeader('Appearance', textS),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: border),
                   ),
-                  icon: const Icon(Icons.logout, size: 16),
-                  label: const Text('Sign Out'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: kWarning,
-                    side: const BorderSide(color: kWarning),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<ThemeMode>(
+                      value: themeNotifier.mode,
+                      dropdownColor: surface,
+                      isExpanded: true,
+                      style: TextStyle(color: textP),
+                      items: [
+                        DropdownMenuItem(
+                          value: ThemeMode.system,
+                          child: Row(children: [
+                            Icon(Icons.brightness_auto,
+                                color: textS, size: 16),
+                            const SizedBox(width: 10),
+                            Text('Follow system',
+                                style: TextStyle(
+                                    color: textP, fontSize: 14)),
+                          ]),
+                        ),
+                        DropdownMenuItem(
+                          value: ThemeMode.dark,
+                          child: Row(children: [
+                            Icon(Icons.dark_mode,
+                                color: textS, size: 16),
+                            const SizedBox(width: 10),
+                            Text('Dark',
+                                style: TextStyle(
+                                    color: textP, fontSize: 14)),
+                          ]),
+                        ),
+                        DropdownMenuItem(
+                          value: ThemeMode.light,
+                          child: Row(children: [
+                            Icon(Icons.light_mode,
+                                color: textS, size: 16),
+                            const SizedBox(width: 10),
+                            Text('Light',
+                                style: TextStyle(
+                                    color: textP, fontSize: 14)),
+                          ]),
+                        ),
+                      ],
+                      onChanged: (v) =>
+                          themeNotifier.setMode(v ?? ThemeMode.system),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
+
+                // ── Wallet ───────────────────────────────────────
+                _SectionHeader('Wallet', textS),
+                Container(
+                  decoration: BoxDecoration(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: border),
+                  ),
+                  child: ListTile(
+                    leading: Icon(Icons.credit_card_outlined, color: kAccent),
+                    title: Text('Rename wallet',
+                        style: TextStyle(color: textP, fontSize: 14,
+                            fontWeight: FontWeight.w500)),
+                    subtitle: Text(
+                      _wallet != null
+                          ? _wallet!['wallet_name']?.toString() ?? 'My Wallet'
+                          : 'No wallet paired',
+                      style: TextStyle(color: textM, fontSize: 12)),
+                    trailing: Icon(Icons.chevron_right, color: textM),
+                    onTap: _wallet == null ? null : () async {
+                      final newName = await showDialog<String>(
+                        context: context,
+                        builder: (_) => RenameWalletDialog(
+                          currentName:
+                              _wallet!['wallet_name']?.toString() ??
+                                  'My Wallet',
+                          walletId: _wallet!['id'].toString(),
+                        ),
+                      );
+                      if (newName != null && mounted) {
+                        setState(() => _wallet!['wallet_name'] = newName);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('Renamed to "$newName"'),
+                          backgroundColor: kSuccess,
+                        ));
+                      }
+                    },
+                  ),
+                ),
+
+                // ── Account ──────────────────────────────────────
+                _SectionHeader('Account', textS),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _confirmAction(
+                      'Sign out?',
+                      'You will need to log in again.',
+                      () async {
+                        await AuthService.signOut();
+                        if (context.mounted) context.go('/login');
+                      },
+                    ),
+                    icon: const Icon(Icons.logout, size: 16),
+                    label: const Text('Sign Out',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: surface,
+                      foregroundColor: textP,
+                      side: BorderSide(color: border),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+
+                // ── Danger zone ──────────────────────────────────
+                _SectionHeader('Danger Zone', textS),
                 OutlinedButton.icon(
                   onPressed: () => _confirmAction(
                     'Delete all transactions?',
@@ -524,20 +654,22 @@ List<Map<String, dynamic>> _defaultCategories() => [
   }
 
   void _confirmAction(String title, String body, VoidCallback onConfirm) {
+    final dark    = Theme.of(context).brightness == Brightness.dark;
+    final surface = dark ? kSurface : kSurfaceLight;
+    final textP   = dark ? kTextPrimary   : kTextPrimaryLight;
+    final textS   = dark ? kTextSecondary : kTextSecondaryLight;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: kSurface,
+        backgroundColor: surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(title,
-            style: const TextStyle(color: kTextPrimary)),
-        content: Text(body,
-            style: const TextStyle(color: kTextSecondary)),
+        title: Text(title, style: TextStyle(color: textP)),
+        content: Text(body, style: TextStyle(color: textS)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: kTextSecondary)),
+            child: Text('Cancel', style: TextStyle(color: textS)),
           ),
           TextButton(
             onPressed: () { Navigator.pop(context); onConfirm(); },
@@ -553,14 +685,15 @@ List<Map<String, dynamic>> _defaultCategories() => [
 // ── Helper widgets ────────────────────────────────────────────────────────────
 class _SectionHeader extends StatelessWidget {
   final String title;
-  const _SectionHeader(this.title);
+  final Color color;
+  const _SectionHeader(this.title, this.color);
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 28, bottom: 12),
     child: Text(title,
-      style: const TextStyle(
-        color: kTextSecondary, fontSize: 11,
+      style: TextStyle(
+        color: color, fontSize: 11,
         fontWeight: FontWeight.w700, letterSpacing: 1)),
   );
 }
@@ -571,17 +704,24 @@ class _Field extends StatelessWidget {
   final String hint;
   final bool numeric;
   final ValueChanged<String>? onChanged;
+  final Color surface;
+  final Color border;
+  final Color textP;
+  final Color textM;
 
   const _Field(this.label, this.ctrl, {
-    this.hint = '', this.numeric = false, this.onChanged});
+    this.hint = '', this.numeric = false, this.onChanged,
+    required this.surface, required this.border,
+    required this.textP, required this.textM,
+  });
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(label,
-        style: const TextStyle(
-          color: kTextMuted, fontSize: 11,
+        style: TextStyle(
+          color: textM, fontSize: 11,
           fontWeight: FontWeight.w600)),
       const SizedBox(height: 6),
       TextField(
@@ -590,12 +730,12 @@ class _Field extends StatelessWidget {
         keyboardType: numeric
             ? const TextInputType.numberWithOptions(decimal: true)
             : TextInputType.text,
-        style: const TextStyle(color: kTextPrimary),
+        style: TextStyle(color: textP),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: kTextMuted),
+          hintStyle: TextStyle(color: textM),
           filled: true,
-          fillColor: kSurface,
+          fillColor: surface,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
@@ -613,15 +753,17 @@ class _Field extends StatelessWidget {
 class _TipTile extends StatelessWidget {
   final String label;
   final String value;
-  const _TipTile(this.label, this.value);
+  final Color textP;
+  final Color textM;
+  const _TipTile(this.label, this.value, this.textP, this.textM);
 
   @override
   Widget build(BuildContext context) => Column(children: [
     Text(value,
-      style: const TextStyle(
-        color: kTextPrimary, fontWeight: FontWeight.w700,
+      style: TextStyle(
+        color: textP, fontWeight: FontWeight.w700,
         fontSize: 14)),
     Text(label,
-      style: const TextStyle(color: kTextMuted, fontSize: 10)),
+      style: TextStyle(color: textM, fontSize: 10)),
   ]);
 }

@@ -1,3 +1,6 @@
+// lib/app/router.dart  — Day 10 update
+// Added: /transactions, /wallet-events, /rename-wallet
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,12 +13,19 @@ import 'package:tapsense/screens/scanner/scanner_screen.dart';
 import 'package:tapsense/screens/confirm_log/confirm_log_screen.dart';
 import 'package:tapsense/screens/insights/insights_screen.dart';
 import 'package:tapsense/screens/settings/settings_screen.dart';
+// ── new screens ──
+import 'package:tapsense/screens/transactions/transactions_screen.dart';
+import 'package:tapsense/screens/wallet_events/wallet_events_screen.dart';
+import 'package:tapsense/widgets/rename_wallet_dialog.dart';
+import 'package:tapsense/screens/goals/goals_screen.dart';
+import 'package:tapsense/services/fcm_service.dart';
 
 final _auth = Supabase.instance.client.auth;
 
 final appRouter = GoRouter(
   initialLocation: '/login',
   refreshListenable: GoRouterRefreshStream(_auth.onAuthStateChange),
+  navigatorKey: FcmService.navigatorKey,
   redirect: (context, state) {
     final session = _auth.currentSession;
     final onAuth = state.matchedLocation == '/login' ||
@@ -25,14 +35,20 @@ final appRouter = GoRouter(
     return null;
   },
   routes: [
-    GoRoute(path: '/login',      builder: (_, __) => const LoginScreen()),
-    GoRoute(path: '/signup',     builder: (_, __) => const SignupScreen()),
-    GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
-    GoRoute(path: '/home',       builder: (_, __) => const HomeScreen()),
-    GoRoute(path: '/pairing',    builder: (_, __) => const PairingScreen()),
-    GoRoute(path: '/scanner',    builder: (_, __) => const ScannerScreen()),
-    GoRoute(path: '/insights',   builder: (_, __) => const InsightsScreen()),
-    GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+    GoRoute(path: '/login',        builder: (_, __) => const LoginScreen()),
+    GoRoute(path: '/signup',       builder: (_, __) => const SignupScreen()),
+    GoRoute(path: '/onboarding',   builder: (_, __) => const OnboardingScreen()),
+    GoRoute(path: '/home',         builder: (_, __) => const HomeScreen()),
+    GoRoute(path: '/pairing',      builder: (_, __) => const PairingScreen()),
+    GoRoute(path: '/scanner',      builder: (_, __) => const ScannerScreen()),
+    GoRoute(path: '/insights',     builder: (_, __) => const InsightsScreen()),
+    GoRoute(path: '/settings',     builder: (_, __) => const SettingsScreen()),
+    // ── Day 10 ──────────────────────────────────────────────────────────────
+    GoRoute(path: '/transactions', builder: (_, __) => const TransactionsScreen()),
+    GoRoute(path: '/wallet-events',builder: (_, __) => const WalletEventsScreen()),
+    GoRoute(path: '/rename-wallet',builder: (_, __) => const RenameWalletScreen()),
+    GoRoute(path: '/goals', builder: (_, __) => const GoalsScreen()),
+    // ────────────────────────────────────────────────────────────────────────
     GoRoute(
       path: '/confirm-log',
       builder: (_, state) {
@@ -43,7 +59,7 @@ final appRouter = GoRouter(
           'amount': null,
           'rawQr': null,
         };
-        return ConfirmLogScreen(data: data);
+        return const ConfirmLogScreen();
       },
     ),
   ],

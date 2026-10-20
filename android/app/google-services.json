@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "85779014041",
+    "project_id": "tapsense-b1cfa",
+    "storage_bucket": "tapsense-b1cfa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:85779014041:android:bd3853d21bac2a46a2f308",
+        "android_client_info": {
+          "package_name": "com.example.tapsense"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCL5ElMrlsfYWacByw0hMjy4Xp1A07CcXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

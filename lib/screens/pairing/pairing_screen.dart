@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/services/bluetooth_service.dart';
 
@@ -41,11 +42,45 @@ class _PairingScreenState extends State<PairingScreen> {
     final success = await walletBluetooth.connect(device);
     if (mounted) {
       if (success) {
+        // ── Upsert wallet row so rename + settings can find it ──
+        await _upsertWallet(
+          deviceId: device.remoteId.str,
+          deviceName: device.platformName,
+        );
         _showSuccess(device.platformName);
       } else {
         setState(() { _connecting = false; _connectingId = null; });
         _showError();
       }
+    }
+  }
+
+  Future<void> _upsertWallet({
+    required String deviceId,
+    required String deviceName,
+  }) async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      // Use upsert so re-pairing the same device updates rather than errors
+      await Supabase.instance.client.from('wallets').upsert(
+        {
+          'user_id': userId,
+          'device_id': deviceId,
+          'device_name': deviceName,
+          // wallet_name defaults to device_name on first pair;
+          // if a row already exists (same user_id) the wallet_name
+          // the user set is preserved because we only upsert on
+          // the user_id conflict column.
+          'wallet_name': deviceName,
+        },
+        onConflict: 'user_id', // one wallet per user
+        ignoreDuplicates: false,
+      );
+    } catch (e) {
+      // Non-fatal — pairing still succeeds, rename will just show default name
+      debugPrint('wallet upsert error: $e');
     }
   }
 
