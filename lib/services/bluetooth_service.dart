@@ -1,3 +1,11 @@
+// lib/services/bluetooth_service.dart
+//
+// Fix #11: removed all BLE name/service filtering from scan() so ANY
+// Bluetooth device name appears in the pairing screen, not just "TapSense".
+// The firmware UUID filter (withServices) is also removed — it was preventing
+// devices from appearing during discovery. UUID matching still happens in
+// _discoverServices() after a successful connect.
+
 import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -23,9 +31,17 @@ class WalletBluetooth {
   bool get isConnected => _device?.isConnected == true;
 
   // ── Scan ───────────────────────────────────────────────────────────────────
+  //
+  // No withServices filter and no name filter here.
+  // All nearby BLE devices will appear in the pairing screen so the user can
+  // pick their TapSense wallet regardless of its advertised name.
+  // UUID verification happens in _discoverServices() after pairing.
 
   Stream<List<ScanResult>> scan() {
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+    FlutterBluePlus.startScan(
+      timeout: const Duration(seconds: 10),
+      // withServices: [],   // intentionally empty — show ALL devices
+    );
     return FlutterBluePlus.scanResults;
   }
 
@@ -51,14 +67,19 @@ class WalletBluetooth {
   }
 
   // ── Service discovery ──────────────────────────────────────────────────────
+  //
+  // UUID check lives here — only after connect. This means any BLE device
+  // can be selected from the list, but buzz commands only work if the device
+  // actually exposes our proprietary service UUIDs.
 
   Future<void> _discoverServices() async {
     final services = await _device!.discoverServices();
     for (final service in services) {
-      if (service.uuid.toString() == SERVICE_UUID) {
+      if (service.uuid.toString().toLowerCase() ==
+          SERVICE_UUID.toLowerCase()) {
         for (final char in service.characteristics) {
-          final uuid = char.uuid.toString();
-          if (uuid == EVENTS_UUID) {
+          final uuid = char.uuid.toString().toLowerCase();
+          if (uuid == EVENTS_UUID.toLowerCase()) {
             await char.setNotifyValue(true);
             char.lastValueStream.listen((data) {
               if (data.isNotEmpty) {
@@ -66,7 +87,7 @@ class WalletBluetooth {
               }
             });
           }
-          if (uuid == COMMANDS_UUID) {
+          if (uuid == COMMANDS_UUID.toLowerCase()) {
             _commandsChar = char;
           }
         }
@@ -85,15 +106,6 @@ class WalletBluetooth {
   Future<void> testBuzz() => buzz(kBuzzNormal);
 
   // ── Buzz intensity API ─────────────────────────────────────────────────────
-  //
-  // Called by budget_service after every transaction save.
-  // The firmware maps byte[1] to vibration intensity:
-  //   0x01 → single short buzz   (normal confirm)
-  //   0x02 → double buzz         (approaching cap, >80%)
-  //   0x03 → long continuous     (over cap — spend flagged)
-  //
-  // Stub: silently no-ops when wallet is not connected so callers
-  // don't need to check connection state.
 
   /// Send buzz based on budget percentage.
   /// [spentFraction] is current spend / cap (e.g. 0.85 = 85% used).

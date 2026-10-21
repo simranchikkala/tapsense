@@ -33,8 +33,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String _userName   = '';
   String _currencyCode = 'SGD';
 
-  // Budget warnings — list of category ids that are over cap this month
-  List<String> _overBudgetCats = [];
+  // Budget warnings — full results for over-cap and near-cap categories this month
+  List<BudgetCheckResult> _overBudgetResults  = [];
+  List<BudgetCheckResult> _nearBudgetResults  = [];
+  List<String> get _overBudgetCats => _overBudgetResults.map((r) => r.categoryId).toList();
 
   @override
   void initState() {
@@ -84,11 +86,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return d.year  == today.year &&
              d.month == today.month &&
              d.day   == today.day   &&
-             tx.amount < 0;          // count only debits
+             tx.amount < 0 &&
+             tx.sharedWith != 'they_owe'; // exclude incoming
     }).length;
 
     // ── Budget check ──────────────────────────────────────────────────────
-    final overBudget = <String>[];
+    final overBudgetResults = <BudgetCheckResult>[];
+    final nearBudgetResults = <BudgetCheckResult>[];
     try {
       final spendMap = await TransactionService.monthTotalByCategory(userId);
       for (final entry in spendMap.entries) {
@@ -96,21 +100,248 @@ class _HomeScreenState extends State<HomeScreen> {
           userId:     userId,
           categoryId: entry.key,
         );
-        if (result != null && result.overBudget) {
-          overBudget.add(entry.key);
+        if (result == null) continue;
+        if (result.overBudget) {
+          overBudgetResults.add(result);
+        } else if (result.nearBudget) {
+          nearBudgetResults.add(result);
         }
       }
     } catch (_) {}
 
     if (mounted) {
       setState(() {
-        _recent          = recent;
-        _todayTotal      = total;
-        _todayCount      = todayCount;
-        _overBudgetCats  = overBudget;
-        _loading         = false;
+        _recent             = recent;
+        _todayTotal         = total;
+        _todayCount         = todayCount;
+        _overBudgetResults  = overBudgetResults;
+        _nearBudgetResults  = nearBudgetResults;
+        _loading            = false;
       });
     }
+  }
+
+  void _showOverBudgetSheet(BuildContext context) {
+    final dark    = Theme.of(context).brightness == Brightness.dark;
+    final surface = dark ? kSurface : kSurfaceLight;
+    final border  = dark ? kBorder  : kBorderLight;
+    final textP   = dark ? kTextPrimary   : kTextPrimaryLight;
+    final textS   = dark ? kTextSecondary : kTextSecondaryLight;
+    final textM   = dark ? kTextMuted     : kTextMutedLight;
+    final fmt     = NumberFormat.currency(symbol: 'S\$', decimalDigits: 2);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                decoration: BoxDecoration(
+                    color: border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                    color: kError.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.warning_amber_rounded,
+                    color: kError, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Over Budget',
+                    style: TextStyle(
+                        color: textP, fontSize: 17,
+                        fontWeight: FontWeight.w700)),
+                Text('${_overBudgetResults.length} ${_overBudgetResults.length == 1 ? 'category' : 'categories'} exceeded this month',
+                    style: TextStyle(color: textM, fontSize: 12)),
+              ]),
+            ]),
+            const SizedBox(height: 16),
+            ..._overBudgetResults.map((r) {
+              final catLabel = BudgetService.catLabel(r.categoryId);
+              final pct = (r.fraction * 100).round();
+              final overage = r.spent - r.cap;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: kError.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kError.withOpacity(0.25)),
+                ),
+                child: Row(children: [
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(catLabel,
+                          style: TextStyle(
+                              color: textP, fontWeight: FontWeight.w600,
+                              fontSize: 14)),
+                      const SizedBox(height: 4),
+                      Text('${fmt.format(r.spent)} spent · cap ${fmt.format(r.cap)}',
+                          style: TextStyle(color: textS, fontSize: 12)),
+                    ],
+                  )),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('$pct%',
+                        style: const TextStyle(
+                            color: kError, fontSize: 16,
+                            fontWeight: FontWeight.w800)),
+                    Text('+${fmt.format(overage)} over',
+                        style: TextStyle(color: textM, fontSize: 11)),
+                  ]),
+                ]),
+              );
+            }),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.push('/goals');
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: kAccent,
+                  side: const BorderSide(color: kAccent),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('View Goals'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showNearBudgetSheet(BuildContext context) {
+    final dark    = Theme.of(context).brightness == Brightness.dark;
+    final surface = dark ? kSurface : kSurfaceLight;
+    final border  = dark ? kBorder  : kBorderLight;
+    final textP   = dark ? kTextPrimary   : kTextPrimaryLight;
+    final textS   = dark ? kTextSecondary : kTextSecondaryLight;
+    final textM   = dark ? kTextMuted     : kTextMutedLight;
+    final fmt     = NumberFormat.currency(symbol: 'S\$', decimalDigits: 2);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                decoration: BoxDecoration(
+                    color: border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                    color: kWarning.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.info_outline,
+                    color: kWarning, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Approaching Limit',
+                    style: TextStyle(
+                        color: textP, fontSize: 17,
+                        fontWeight: FontWeight.w700)),
+                Text('${_nearBudgetResults.length} ${_nearBudgetResults.length == 1 ? 'category' : 'categories'} above 80%',
+                    style: TextStyle(color: textM, fontSize: 12)),
+              ]),
+            ]),
+            const SizedBox(height: 16),
+            ..._nearBudgetResults.map((r) {
+              final catLabel = BudgetService.catLabel(r.categoryId);
+              final pct      = (r.fraction * 100).round();
+              final remaining = r.cap - r.spent;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: kWarning.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kWarning.withOpacity(0.25)),
+                ),
+                child: Row(children: [
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(catLabel,
+                          style: TextStyle(
+                              color: textP, fontWeight: FontWeight.w600,
+                              fontSize: 14)),
+                      const SizedBox(height: 4),
+                      Text('${fmt.format(r.spent)} spent · cap ${fmt.format(r.cap)}',
+                          style: TextStyle(color: textS, fontSize: 12)),
+                    ],
+                  )),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('$pct%',
+                        style: const TextStyle(
+                            color: kWarning, fontSize: 16,
+                            fontWeight: FontWeight.w800)),
+                    Text('${fmt.format(remaining)} left',
+                        style: TextStyle(color: textM, fontSize: 11)),
+                  ]),
+                ]),
+              );
+            }),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.push('/goals');
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: kAccent,
+                  side: const BorderSide(color: kAccent),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('View Goals'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _symbol(String code) {
@@ -225,10 +456,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             // ── Over-budget warning pill ──────────────────
                             if (_overBudgetCats.isNotEmpty)
                               _StatPill(
-                                label: '⚠ ${_overBudgetCats.length} category over budget',
+                                label: '⚠ ${_overBudgetCats.length} ${_overBudgetCats.length == 1 ? 'category' : 'categories'} over budget',
                                 icon: Icons.warning_amber_rounded,
                                 color: kError,
-                                onTap: () => context.push('/goals'),
+                                onTap: () => _showOverBudgetSheet(context),
+                              ),
+                            // ── Near-budget amber pill ────────────────────
+                            if (_nearBudgetResults.isNotEmpty)
+                              _StatPill(
+                                label: '${_nearBudgetResults.length} ${_nearBudgetResults.length == 1 ? 'category' : 'categories'} near limit',
+                                icon: Icons.info_outline,
+                                color: kWarning,
+                                onTap: () => _showNearBudgetSheet(context),
                               ),
                           ],
                         ),
@@ -252,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Expanded(child: _ActionBtn(
                       icon: Icons.add_circle_outline,
                       label: 'Manual',
-                      color: kSuccess,
+                      color: kTextMuted,
                       onTap: () => context.push('/confirm-log', extra: {
                         'triggerType': 'manual',
                         'merchantName': null,
@@ -279,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 20),
 
-                  // ── Mock wallet events ──────────────────────────────────
+                  // ── Quick actions ───────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -293,14 +532,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Mock Wallet Events',
+                            Text('Quick Actions',
                               style: TextStyle(
                                 color: textM, fontSize: 11,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.5)),
                             GestureDetector(
                               onTap: () => context.push('/wallet-events'),
-                              child: Text('View all',
+                              child: Text('Wallet events',
                                 style: TextStyle(
                                   color: kAccent, fontSize: 12,
                                   fontWeight: FontWeight.w600)),
@@ -330,7 +569,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           )),
                           const SizedBox(width: 8),
-                          // ── Mic replaces "Button" ─────────────────────
                           VoiceLogButton(),
                         ]),
                       ],
@@ -473,13 +711,16 @@ class _TxTile extends StatelessWidget {
       orElse: () => kCategories.firstWhere((c) => c.id == 'other'),
     );
 
-    final isDebit   = tx.amount < 0;
-    final amtColor  = isDebit
-        ? (dark ? kError : kErrorLight)
-        : (dark ? kSuccess : kSuccessLight);
-    final amtLabel  = isDebit
-        ? '-$symbol ${tx.amount.abs().toStringAsFixed(2)}'
-        : '+$symbol ${tx.amount.toStringAsFixed(2)}';
+    // "They owe" = money coming back → show positive/green regardless of stored sign
+    final theyOwe      = tx.sharedWith == 'they_owe';
+    final displayAmt   = theyOwe ? tx.amount.abs() : tx.amount;
+    final isPositive   = displayAmt >= 0;
+    final amtColor     = isPositive
+        ? (dark ? kSuccess : kSuccessLight)
+        : (dark ? kError   : kErrorLight);
+    final amtLabel     = isPositive
+        ? '+$symbol ${displayAmt.toStringAsFixed(2)}'
+        : '-$symbol ${displayAmt.abs().toStringAsFixed(2)}';
 
     final label = (tx.merchantName?.isNotEmpty == true)
         ? tx.merchantName!

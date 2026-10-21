@@ -44,7 +44,6 @@ class _InsightsScreenState extends State<InsightsScreen> {
     await _loadDigest();
   }
 
-  // ── Total spend this week (absolute value of debits only) ──────────────────
   double get _weekSpend {
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
     return _txs
@@ -52,7 +51,6 @@ class _InsightsScreenState extends State<InsightsScreen> {
         .fold(0.0, (s, t) => s + t.amount.abs());
   }
 
-  // ── Category breakdown: absolute spend per category (debits only) ──────────
   Map<String, double> get _byCategory {
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
     final map = <String, double>{};
@@ -60,12 +58,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
         (t) => t.createdAt.isAfter(cutoff) && t.amount < 0)) {
       map[t.categoryId] = (map[t.categoryId] ?? 0) + t.amount.abs();
     }
-    // Sort descending by spend
     return Map.fromEntries(
         map.entries.toList()..sort((a, b) => b.value.compareTo(a.value)));
   }
 
-  // ── Daily spend (absolute, debits only) ───────────────────────────────────
   List<double> get _dailySpend {
     final now = DateTime.now();
     return List.generate(7, (i) {
@@ -92,19 +88,29 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ── Theme-aware colours (fixes dark-mode-only rendering) ──────────────────
+    final dark    = Theme.of(context).brightness == Brightness.dark;
+    final bg      = dark ? kBg      : kBgLight;
+    final surface = dark ? kSurface : kSurfaceLight;
+    final border  = dark ? kBorder  : kBorderLight;
+    final textP   = dark ? kTextPrimary    : kTextPrimaryLight;
+    final textS   = dark ? kTextSecondary  : kTextSecondaryLight;
+    final textM   = dark ? kTextMuted      : kTextMutedLight;
+
     return Scaffold(
-      backgroundColor: kBg,
+      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('Insights'),
+        backgroundColor: bg,
+        title: Text('Insights', style: TextStyle(color: textP)),
         leading: BackButton(
-            color: kTextPrimary,
+            color: textP,
             onPressed: () => Navigator.pop(context)),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kAccent))
+          ? Center(child: CircularProgressIndicator(color: kAccent))
           : RefreshIndicator(
               color: kAccent,
-              backgroundColor: kSurface,
+              backgroundColor: surface,
               onRefresh: _load,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
@@ -124,20 +130,20 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('This week',
+                        Text('This week',
                             style: TextStyle(
-                                color: kTextSecondary, fontSize: 13)),
+                                color: textS, fontSize: 13)),
                         const SizedBox(height: 6),
                         Text('S\$ ${_weekSpend.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                color: kTextPrimary,
+                            style: TextStyle(
+                                color: textP,
                                 fontSize: 32,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -1)),
                         const SizedBox(height: 4),
                         Text('${_txs.length} transactions logged',
-                            style: const TextStyle(
-                                color: kTextMuted, fontSize: 12)),
+                            style: TextStyle(
+                                color: textM, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -145,9 +151,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   const SizedBox(height: 24),
 
                   // ── Bar chart ───────────────────────────────────
-                  const Text('Daily spend',
+                  Text('Daily spend',
                       style: TextStyle(
-                          color: kTextPrimary,
+                          color: textP,
                           fontSize: 15,
                           fontWeight: FontWeight.w700)),
                   const SizedBox(height: 14),
@@ -156,14 +162,14 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     height: 180,
                     padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
                     decoration: BoxDecoration(
-                      color: kSurface,
+                      color: surface,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: kBorder),
+                      border: Border.all(color: border),
                     ),
                     child: _dailySpend.every((v) => v == 0)
-                        ? const Center(
+                        ? Center(
                             child: Text('No data yet',
-                                style: TextStyle(color: kTextMuted)))
+                                style: TextStyle(color: textM)))
                         : BarChart(
                             BarChartData(
                               maxY: (_dailySpend.reduce(
@@ -172,11 +178,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                   .clamp(10, double.infinity),
                               barTouchData: BarTouchData(
                                 touchTooltipData: BarTouchTooltipData(
-                                  getTooltipColor: (_) => kSurface,
+                                  getTooltipColor: (_) => surface,
                                   getTooltipItem: (g, gi, rod, ri) =>
                                       BarTooltipItem(
                                           'S\$ ${rod.toY.toStringAsFixed(2)}',
-                                          const TextStyle(
+                                          TextStyle(
                                               color: kAccent,
                                               fontWeight: FontWeight.w700,
                                               fontSize: 12)),
@@ -191,8 +197,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                           const EdgeInsets.only(top: 4),
                                       child: Text(
                                           _dayLabels[v.toInt()],
-                                          style: const TextStyle(
-                                              color: kTextMuted,
+                                          style: TextStyle(
+                                              color: textM,
                                               fontSize: 10)),
                                     ),
                                   ),
@@ -210,7 +216,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                               gridData: FlGridData(
                                 drawVerticalLine: false,
                                 getDrawingHorizontalLine: (_) => FlLine(
-                                    color: kBorder, strokeWidth: 1),
+                                    color: border, strokeWidth: 1),
                               ),
                               borderData: FlBorderData(show: false),
                               barGroups: List.generate(
@@ -242,9 +248,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   const SizedBox(height: 28),
 
                   // ── AI digest card ──────────────────────────────
-                  const Text('Weekly digest',
+                  Text('Weekly digest',
                       style: TextStyle(
-                          color: kTextPrimary,
+                          color: textP,
                           fontSize: 15,
                           fontWeight: FontWeight.w700)),
                   const SizedBox(height: 14),
@@ -252,22 +258,22 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: kSurface,
+                      color: surface,
                       borderRadius: BorderRadius.circular(16),
                       border:
                           Border.all(color: kAccent.withOpacity(0.3)),
                     ),
                     child: _digestLoading
-                        ? const Row(children: [
-                            SizedBox(
+                        ? Row(children: [
+                            const SizedBox(
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: kAccent)),
-                            SizedBox(width: 12),
+                            const SizedBox(width: 12),
                             Text('Generating summary...',
                                 style: TextStyle(
-                                    color: kTextSecondary, fontSize: 13)),
+                                    color: textS, fontSize: 13)),
                           ])
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,8 +290,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                 const Spacer(),
                                 GestureDetector(
                                   onTap: _loadDigest,
-                                  child: const Icon(Icons.refresh,
-                                      color: kTextMuted, size: 16),
+                                  child: Icon(Icons.refresh,
+                                      color: textM, size: 16),
                                 ),
                               ]),
                               const SizedBox(height: 10),
@@ -293,8 +299,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                 _digest.isEmpty
                                     ? 'Tap refresh to generate your weekly summary.'
                                     : _digest,
-                                style: const TextStyle(
-                                    color: kTextSecondary,
+                                style: TextStyle(
+                                    color: textS,
                                     fontSize: 13,
                                     height: 1.5),
                               ),
@@ -305,9 +311,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   const SizedBox(height: 28),
 
                   // ── Category breakdown ──────────────────────────
-                  const Text('By category',
+                  Text('By category',
                       style: TextStyle(
-                          color: kTextPrimary,
+                          color: textP,
                           fontSize: 15,
                           fontWeight: FontWeight.w700)),
                   const SizedBox(height: 14),
@@ -316,13 +322,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: kSurface,
+                        color: surface,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: kBorder),
+                        border: Border.all(color: border),
                       ),
-                      child: const Center(
+                      child: Center(
                           child: Text('No spend data yet',
-                              style: TextStyle(color: kTextMuted))),
+                              style: TextStyle(color: textM))),
                     )
                   else ...[
                     SizedBox(
@@ -343,13 +349,12 @@ class _InsightsScreenState extends State<InsightsScreen> {
                             .map((entry) {
                           final i   = entry.key;
                           final cat = categoryById(entry.value.key);
-                          // Use absolute spend values — _weekSpend is already abs
                           final pct = _weekSpend > 0
                               ? entry.value.value / _weekSpend * 100
                               : 0.0;
                           final isTouched = i == _touchedIndex;
                           return PieChartSectionData(
-                            value: entry.value.value, // always positive
+                            value: entry.value.value,
                             color: cat.color,
                             radius: isTouched ? 60 : 50,
                             title: '${pct.toStringAsFixed(0)}%',
@@ -374,9 +379,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
-                          color: kSurface,
+                          color: surface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: kBorder),
+                          border: Border.all(color: border),
                         ),
                         child: Row(children: [
                           Container(
@@ -391,17 +396,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                               child: Text(cat.name,
-                                  style: const TextStyle(
-                                      color: kTextPrimary,
+                                  style: TextStyle(
+                                      color: textP,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500))),
                           Text('${pct.toStringAsFixed(1)}%',
-                              style: const TextStyle(
-                                  color: kTextSecondary, fontSize: 12)),
+                              style: TextStyle(
+                                  color: textS, fontSize: 12)),
                           const SizedBox(width: 12),
                           Text('S\$ ${e.value.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                  color: kTextPrimary,
+                              style: TextStyle(
+                                  color: textP,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700)),
                         ]),

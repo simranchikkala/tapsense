@@ -70,11 +70,15 @@ class FcmService {
 
   static Future<void> _upsertToken(String userId, String token) async {
     try {
+      // profiles PK is 'id' (= auth user id), not 'user_id'
       await _sb.from('profiles').upsert(
-        {'user_id': userId, 'fcm_token': token},
-        onConflict: 'user_id',
+        {'id': userId, 'fcm_token': token},
+        onConflict: 'id',
       );
-    } catch (_) {}
+    } catch (e) {
+      // Log for debugging — check Supabase SQL: SELECT id, fcm_token FROM profiles
+      debugPrint('[FCM] token upsert failed: $e');
+    }
   }
 
   // ── Foreground message handler ──────────────────────────────────────────────

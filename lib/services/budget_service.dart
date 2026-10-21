@@ -40,38 +40,57 @@ class BudgetService {
 
   // ── Core check ──────────────────────────────────────────────────────────────
 
-  /// Returns null if no category-cap goal exists for this category this month.
+  /// Returns null if no budget goal exists for this category/month.
+  /// Checks category-specific goals first, then falls back to total monthly goal.
   static Future<BudgetCheckResult?> checkCategory({
     required String userId,
     required String categoryId,
   }) async {
-    final sb  = Supabase.instance.client;
-    final now = DateTime.now();
+    final sb    = Supabase.instance.client;
+    final now   = DateTime.now();
     final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
 
-    // Find matching category-cap goal
+    // Fetch all goals for this user this month
     final goals = await sb
         .from('goals')
         .select()
         .eq('user_id', userId)
-        .eq('type', 'category')
         .eq('month', month);
 
     final list = List<Map<String, dynamic>>.from(goals as List);
-    final goal = list.firstWhere(
-      (g) => (g['category'] as String?)?.toLowerCase() ==
-          categoryId.toLowerCase(),
+
+    // 1. Try to find a category-specific cap
+    final catGoal = list.firstWhere(
+      (g) =>
+          (g['type'] as String?) == 'category' &&
+          (g['category'] as String?)?.toLowerCase() == categoryId.toLowerCase(),
       orElse: () => <String, dynamic>{},
     );
 
-    if (goal.isEmpty) return null;
+    // 2. Fall back to a monthly total cap
+    final monthGoal = list.firstWhere(
+      (g) => (g['type'] as String?) == 'monthly',
+      orElse: () => <String, dynamic>{},
+    );
 
-    final cap = (goal['target'] as num?)?.toDouble() ?? 0;
+    final chosenGoal = catGoal.isNotEmpty ? catGoal : monthGoal;
+    if (chosenGoal.isEmpty) return null;
+
+    final cap = (chosenGoal['target'] as num?)?.toDouble() ?? 0;
     if (cap <= 0) return null;
 
-    // Get actual month spend for this category
+    // Get actual month spend
     final spendMap = await TransactionService.monthTotalByCategory(userId);
-    final spent    = spendMap[categoryId] ?? 0.0;
+
+    final double spent;
+    if (catGoal.isNotEmpty) {
+      // Category goal → spend for that category
+      spent = spendMap[categoryId] ?? 0.0;
+    } else {
+      // Monthly total goal → sum all categories
+      spent = spendMap.values.fold(0.0, (s, v) => s + v);
+    }
+
     final fraction = spent / cap;
 
     return BudgetCheckResult(
@@ -145,6 +164,7 @@ class BudgetService {
       // ── Background push via Supabase Edge Function ────────────────────────
       // Fires even when app is foregrounded — FCM will suppress the system
       // notification if the app is open (foreground handler handles it there).
+      debugPrint('[Budget] triggering push: over=${ result.overBudget} near=${result.nearBudget} cat=$categoryId');
       _sendPush(userId: userId, title: pushTitle, body: pushBody);
 
     } catch (_) {
@@ -162,7 +182,8 @@ class BudgetService {
     required String body,
   }) async {
     try {
-      await Supabase.instance.client.functions.invoke(
+      debugPrint('[Budget] _sendPush → invoking edge fn for $userId');
+      final res = await Supabase.instance.client.functions.invoke(
         'send-budget-notification',
         body: {
           'userId': userId,
@@ -170,8 +191,9 @@ class BudgetService {
           'body':   body,
         },
       );
-    } catch (_) {
-      // Non-fatal
+      debugPrint('[Budget] _sendPush ← status: ${res.status}, data: ${res.data}');
+    } catch (e) {
+      debugPrint('[Budget] _sendPush error: $e');
     }
   }
 
@@ -200,6 +222,8 @@ class BudgetService {
     });
   }
 
+  // Exposed publicly so home_screen over-budget sheet can use it
+  static String catLabel(String id) => _catLabel(id);
   static String _catLabel(String id) {
     const labels = {
       'food':          'Food',

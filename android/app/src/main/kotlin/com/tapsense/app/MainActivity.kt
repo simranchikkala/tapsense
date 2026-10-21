@@ -1,4 +1,4 @@
-package com.example.tapsense
+package com.tapsense.app
 
 import io.flutter.embedding.android.FlutterActivity
 

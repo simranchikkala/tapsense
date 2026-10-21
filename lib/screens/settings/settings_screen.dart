@@ -47,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _goalMonth = '';
   bool _saving  = false;
   bool _loading = true;
+  bool _savingGoal = false;
 
   // Wallet (for rename)
   Map<String, dynamic>? _wallet;
@@ -200,6 +201,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() => _saving = false);
   }
 
+  // ── Save goal to Supabase goals table ────────────────────────────────────────
+  Future<void> _saveGoal() async {
+    final name   = _goalNameCtrl.text.trim();
+    final target = double.tryParse(_goalAmtCtrl.text);
+    if (name.isEmpty || target == null || target <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter a goal name and a target amount'),
+        backgroundColor: kError,
+      ));
+      return;
+    }
+
+    setState(() => _savingGoal = true);
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    final now    = DateTime.now();
+    final month  = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+
+    // Determine deadline from selected month
+    DateTime? deadline;
+    if (_goalMonth.isNotEmpty) {
+      final monthIndex = _months.indexOf(_goalMonth);
+      if (monthIndex > 0) {
+        final year = monthIndex >= now.month ? now.year : now.year + 1;
+        deadline = DateTime(year, monthIndex + 1, 0); // last day of target month
+      }
+    }
+
+    try {
+      await Supabase.instance.client.from('goals').insert({
+        'user_id':       userId,
+        'name':          name,
+        'type':          'savings',
+        'target':        target,
+        'target_amount': target,
+        'current':       0,
+        'category':      null,
+        'deadline':      deadline?.toIso8601String(),
+        'month':         month,
+      });
+
+      if (mounted) {
+        _goalNameCtrl.clear();
+        _goalAmtCtrl.clear();
+        setState(() { _goalMonth = ''; _savingGoal = false; });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Goal added ✓ — check Goals screen'),
+          backgroundColor: kSuccess,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _savingGoal = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Goal save failed: $e'),
+          backgroundColor: kError,
+        ));
+      }
+    }
+  }
+
   void _addCategory() {
     final name = _newCatCtrl.text.trim();
     if (name.isEmpty) return;
@@ -226,6 +287,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final textP   = dark ? kTextPrimary    : kTextPrimaryLight;
     final textS   = dark ? kTextSecondary  : kTextSecondaryLight;
     final textM   = dark ? kTextMuted      : kTextMutedLight;
+
+    // Fix #3: use kWarning directly but ensure visible in both modes
+    // Fix #1: "Clear All" button border — use kError (red) not kWarning
+    // kWarning is already used on the button, which is correct in both modes
 
     return Scaffold(
       backgroundColor: bg,
@@ -371,6 +436,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       )).toList(),
                       onChanged: (v) =>
                           setState(() => _goalMonth = v ?? ''),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // ── Add Goal button — now actually saves to goals table ────────
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _savingGoal ? null : _saveGoal,
+                    icon: _savingGoal
+                        ? const SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.add, size: 16),
+                    label: Text(_savingGoal ? 'Saving…' : 'Add Goal'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kAccent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
                 ),
@@ -618,6 +705,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 // ── Danger zone ──────────────────────────────────
                 _SectionHeader('Danger Zone', textS),
+                // Fix #1: OutlinedButton.icon with explicit foregroundColor+side
+                // so it never picks up kWarning tint in dark mode
                 OutlinedButton.icon(
                   onPressed: () => _confirmAction(
                     'Delete all transactions?',
@@ -639,8 +728,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }
                     },
                   ),
-                  icon: const Icon(Icons.delete_outline, size: 16),
-                  label: const Text('Clear All Transactions'),
+                  icon: const Icon(Icons.delete_outline, size: 16,
+                      color: kError),
+                  label: const Text('Clear All Transactions',
+                      style: TextStyle(color: kError)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: kError,
                     side: const BorderSide(color: kError),

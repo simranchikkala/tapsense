@@ -82,7 +82,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
       final monthStart = DateTime(now.year, now.month, 1).toIso8601String();
       final rawTxns = await _sb
           .from('transactions')
-          .select('amount, category, created_at')
+          .select('amount, category_id, created_at')
           .eq('user_id', uid)
           .gte('created_at', monthStart);
 
@@ -107,7 +107,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
           final cat = g['category'] as String? ?? '';
           current = txns
               .where((t) =>
-                  (t['category'] as String?)?.toLowerCase() ==
+                  (t['category_id'] as String?)?.toLowerCase() ==
                   cat.toLowerCase())
               .fold(0.0, (s, t) =>
                   s + ((t['amount'] as num?)?.toDouble().abs() ?? 0));
@@ -121,11 +121,16 @@ class _GoalsScreenState extends State<GoalsScreen> {
           try { deadline = DateTime.parse(g['deadline'] as String); } catch (_) {}
         }
 
+        // Read from 'target'; fall back to 'target_amount' for legacy rows
+        final targetVal = (g['target'] as num?)?.toDouble()
+            ?? (g['target_amount'] as num?)?.toDouble()
+            ?? 0.0;
+
         goals.add(Goal(
           id:       g['id'].toString(),
           type:     type,
           name:     g['name'] as String? ?? 'Goal',
-          target:   (g['target'] as num?)?.toDouble() ?? 0,
+          target:   targetVal,
           current:  current,
           category: g['category'] as String?,
           deadline: deadline,
@@ -135,7 +140,18 @@ class _GoalsScreenState extends State<GoalsScreen> {
 
       if (mounted) setState(() { _goals = goals; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      debugPrint('[Goals] _load error: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Load failed: $e',
+                style: const TextStyle(color: Colors.white)),
+            backgroundColor: const Color(0xFFB91C1C), // dark red, white text readable
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
@@ -640,15 +656,17 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
 
     try {
       await _sb.from('goals').insert({
-        'user_id':  uid,
-        'name':     name,
-        'type':     switch (_type) {
+        'user_id':      uid,
+        'name':         name,
+        'type':         switch (_type) {
           GoalType.savings  => 'savings',
           GoalType.monthly  => 'monthly',
           GoalType.category => 'category',
         },
-        'target':   target,
-        'current':  0,
+        // Write to both columns — 'target' is new, 'target_amount' is legacy NOT NULL col
+        'target':        target,
+        'target_amount': target,
+        'current':       0,
         // Store category_id (e.g. 'food') — not display name (e.g. 'Food')
         'category': _type == GoalType.category ? _categoryId : null,
         'deadline': _deadline?.toIso8601String(),

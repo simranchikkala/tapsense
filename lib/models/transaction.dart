@@ -10,6 +10,7 @@ class Transaction {
   final String? rawQr;
   final String? paymentMode;
   final String txType;       // 'debit' | 'credit'
+  final String? sharedWith;  // 'you_owe' | 'they_owe' | null
   final DateTime createdAt;
 
   Transaction({
@@ -24,6 +25,7 @@ class Transaction {
     this.rawQr,
     this.paymentMode,
     this.txType = 'debit',
+    this.sharedWith,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -39,6 +41,7 @@ class Transaction {
     if (rawQr != null) 'raw_qr': rawQr,
     if (paymentMode != null) 'payment_mode': paymentMode,
     'tx_type': txType,
+    if (sharedWith != null) 'shared_with': sharedWith,
     'created_at': createdAt.toIso8601String(),
   };
 
@@ -54,6 +57,7 @@ class Transaction {
     rawQr: m['raw_qr'],
     paymentMode: m['payment_mode'],
     txType: m['tx_type'] ?? 'debit',
+    sharedWith: m['shared_with'],
     createdAt: DateTime.parse(m['created_at']),
   );
 }

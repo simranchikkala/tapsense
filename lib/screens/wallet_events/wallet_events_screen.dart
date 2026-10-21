@@ -81,9 +81,6 @@ class _WalletEventsScreenState extends State<WalletEventsScreen>
 
       for (final r in results) {
         final name = r.device.platformName;
-        // filter: only TapSense-named devices (item 8)
-        if (!name.toLowerCase().contains('tapsense') &&
-            !name.toLowerCase().contains('tap')) continue;
         fresh.add(WalletEvent(
           deviceName: name.isEmpty ? 'Unknown' : name,
           deviceId: r.device.remoteId.str,
@@ -249,9 +246,6 @@ class _WalletEventsScreenState extends State<WalletEventsScreen>
             const SizedBox(height: 14),
             Text('Scanning for TapSense devices…',
                 style: TextStyle(color: textM, fontSize: 14)),
-            const SizedBox(height: 6),
-            Text('Only TapSense-named BLE devices appear here.',
-                style: TextStyle(color: textM, fontSize: 12)),
           ],
         ),
       );
