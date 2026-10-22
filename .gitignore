@@ -51,3 +51,18 @@ app.*.map.json
 android/gradle.properties
 tapsense-release.jks
 
+# --- TapSense: secrets & signing (never commit) ---
+env.json
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+key.properties
+*.jks
+*.keystore
+
+# --- iOS build output ---
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/build/
