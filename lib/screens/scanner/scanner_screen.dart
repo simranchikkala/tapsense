@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:tapsense/app/theme.dart';
+import 'package:tapsense/services/app_notifications.dart';
 import 'package:tapsense/services/qr_parser.dart';
 
 class ScannerScreen extends StatefulWidget {
@@ -25,6 +26,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     final raw = barcode!.rawValue!;
     final result = QrParser.parse(raw);
+
+    // "QR scanned" notification (Wallet Activity → Notifications)
+    AppNotifications.qrScanned(result.merchantName ?? '');
 
     context.push('/confirm-log', extra: {
       'triggerType': 'qr_scan',

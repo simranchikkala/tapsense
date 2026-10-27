@@ -51,21 +51,19 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCL5ElMrlsfYWacByw0hMjy4Xp1A07CcXs',
-    appId: '1:85779014041:android:bd3853d21bac2a46a2f308',
+    appId: '1:85779014041:android:39598ce9c5e64db8a2f308',
     messagingSenderId: '85779014041',
     projectId: 'tapsense-b1cfa',
     storageBucket: 'tapsense-b1cfa.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyAlkqMJKXOUNn_-vxOWt_NZwnw6A75CEKk',
-    appId: '1:85779014041:ios:49646d19d4d825e8a2f308',
+    appId: '1:85779014041:ios:093f12b5fa72dafda2f308',
     messagingSenderId: '85779014041',
     projectId: 'tapsense-b1cfa',
     storageBucket: 'tapsense-b1cfa.firebasestorage.app',
-    iosBundleId: 'com.example.tapsense',
+    iosBundleId: 'com.tapsense.app',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyAlkqMJKXOUNn_-vxOWt_NZwnw6A75CEKk',
     appId: '1:85779014041:ios:49646d19d4d825e8a2f308',

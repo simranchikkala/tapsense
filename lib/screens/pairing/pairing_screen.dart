@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +19,7 @@ class _PairingScreenState extends State<PairingScreen> {
   bool _scanning = false;
   bool _connecting = false;
   String? _connectingId;
+  StreamSubscription<List<ScanResult>>? _scanSub; // iOS: cancel old listener on rescan
 
   @override
   void initState() {
@@ -24,30 +27,47 @@ class _PairingScreenState extends State<PairingScreen> {
     _startScan();
   }
 
+  @override
+  void dispose() {
+    _scanSub?.cancel();
+    walletBluetooth.stopScan();
+    super.dispose();
+  }
+
   void _startScan() {
     setState(() { _scanning = true; _results = []; });
-    walletBluetooth.scan().listen((results) {
-      setState(() => _results = results);
-    }, onDone: () {
-      setState(() => _scanning = false);
+    _scanSub?.cancel();
+    _scanSub = walletBluetooth.scan().listen((results) {
+      if (!mounted) return;
+      // TapSense wallet first (if it advertises SERVICE_UUID), then strongest signal.
+      final sorted = [...results]..sort((a, b) {
+          final wa = WalletBluetooth.isLikelyWallet(a) ? 0 : 1;
+          final wb = WalletBluetooth.isLikelyWallet(b) ? 0 : 1;
+          return wa != wb ? wa - wb : b.rssi.compareTo(a.rssi);
+        });
+      setState(() => _results = sorted);
     });
     Future.delayed(const Duration(seconds: 10), () {
       if (mounted) setState(() => _scanning = false);
     });
   }
 
-  Future<void> _connect(BluetoothDevice device) async {
+  Future<void> _connect(ScanResult r) async {
+    final device = r.device;
+    // iOS often has an empty platformName — use the helper's fallback.
+    final name = WalletBluetooth.displayName(r);
     setState(() { _connecting = true; _connectingId = device.remoteId.str; });
     walletBluetooth.stopScan();
     final success = await walletBluetooth.connect(device);
     if (mounted) {
       if (success) {
         // ── Upsert wallet row so rename + settings can find it ──
+        // Note: on iOS remoteId is a per-phone UUID, not the MAC address.
         await _upsertWallet(
           deviceId: device.remoteId.str,
-          deviceName: device.platformName,
+          deviceName: name,
         );
-        _showSuccess(device.platformName);
+        _showSuccess(name);
       } else {
         setState(() { _connecting = false; _connectingId = null; });
         _showError();
@@ -69,10 +89,9 @@ class _PairingScreenState extends State<PairingScreen> {
           'user_id': userId,
           'device_id': deviceId,
           'device_name': deviceName,
-          // wallet_name defaults to device_name on first pair;
-          // if a row already exists (same user_id) the wallet_name
-          // the user set is preserved because we only upsert on
-          // the user_id conflict column.
+          // NOTE: this also overwrites wallet_name on every re-pair.
+          // To keep a name the user set, remove this line and give the
+          // column a default (or set it only when inserting).
           'wallet_name': deviceName,
         },
         onConflict: 'user_id', // one wallet per user
@@ -184,11 +203,20 @@ class _PairingScreenState extends State<PairingScreen> {
                       style: TextStyle(color: kTextPrimary,
                           fontWeight: FontWeight.w700, fontSize: 15)),
                     const SizedBox(height: 4),
-                    Text(
-                      _scanning ? 'Scanning for nearby devices...'
+                    // Shows why scanning couldn't start (Bluetooth off,
+                    // not allowed in iOS Settings, etc.)
+                    ValueListenableBuilder<String>(
+                      valueListenable: walletBluetooth.scanError,
+                      builder: (context, err, _) => Text(
+                        err.isNotEmpty
+                            ? err
+                            : _scanning
+                                ? 'Scanning for nearby devices...'
                                 : 'Scan complete — ${_results.length} device(s) found',
-                      style: const TextStyle(color: kTextSecondary,
-                          fontSize: 12)),
+                        style: TextStyle(
+                            color: err.isNotEmpty ? kError : kTextSecondary,
+                            fontSize: 12)),
+                    ),
                   ],
                 )),
                 if (_scanning)
@@ -229,8 +257,8 @@ class _PairingScreenState extends State<PairingScreen> {
                     itemCount: _results.length,
                     itemBuilder: (_, i) {
                       final r = _results[i];
-                      final name = r.device.platformName.isEmpty
-                          ? 'Unknown Device' : r.device.platformName;
+                      final name = WalletBluetooth.displayName(r);
+                      final isWallet = WalletBluetooth.isLikelyWallet(r);
                       final isConnecting =
                           _connectingId == r.device.remoteId.str;
                       return Container(
@@ -238,7 +266,8 @@ class _PairingScreenState extends State<PairingScreen> {
                         decoration: BoxDecoration(
                           color: kSurface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: kBorder),
+                          border: Border.all(
+                              color: isWallet ? kAccent : kBorder),
                         ),
                         child: ListTile(
                           leading: Container(
@@ -253,7 +282,10 @@ class _PairingScreenState extends State<PairingScreen> {
                           title: Text(name,
                             style: const TextStyle(color: kTextPrimary,
                                 fontWeight: FontWeight.w600, fontSize: 14)),
-                          subtitle: Text(r.device.remoteId.str,
+                          subtitle: Text(
+                            isWallet
+                                ? 'TapSense wallet'
+                                : r.device.remoteId.str,
                             style: const TextStyle(color: kTextMuted,
                                 fontSize: 11)),
                           trailing: isConnecting
@@ -262,7 +294,7 @@ class _PairingScreenState extends State<PairingScreen> {
                                       strokeWidth: 2, color: kAccent))
                               : ElevatedButton(
                                   onPressed: _connecting ? null
-                                      : () => _connect(r.device),
+                                      : () => _connect(r),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: kAccent,
                                     foregroundColor: kTextPrimary,

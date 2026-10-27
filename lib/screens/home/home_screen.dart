@@ -6,6 +6,8 @@
 //   3. Budget warning pill: shows when any category is over cap this month
 //   4. _TxTile: correct sign + red/green colour for debit/credit
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -13,7 +15,6 @@ import 'package:intl/intl.dart';
 import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/models/category.dart';
 import 'package:tapsense/models/transaction.dart';
-import 'package:tapsense/services/auth_service.dart';
 import 'package:tapsense/services/bluetooth_service.dart';
 import 'package:tapsense/services/transaction_service.dart';
 import 'package:tapsense/services/budget_service.dart';
@@ -38,17 +39,28 @@ class _HomeScreenState extends State<HomeScreen> {
   List<BudgetCheckResult> _nearBudgetResults  = [];
   List<String> get _overBudgetCats => _overBudgetResults.map((r) => r.categoryId).toList();
 
+  StreamSubscription<WalletEvent>? _walletSub;
+
   @override
   void initState() {
     super.initState();
-    walletBluetooth.events.listen((event) {
+    _walletSub = walletBluetooth.events.listen((event) {
       if (!mounted) return;
+      // Card taps already show the "Device tapped by card activation" banner
+      // (AppNotifications) — don't show a second message for them.
+      if (event.type == WalletEventType.terminalTap) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Wallet: ${event.label}'),
         backgroundColor: kAccent,
         duration: const Duration(seconds: 2),
       ));
     });
+  }
+
+  @override
+  void dispose() {
+    _walletSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -63,13 +75,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final userId = user?.id ?? '';
     _userName    = user?.userMetadata?['name'] ?? 'there';
 
+    // Name + currency come from Settings (profiles table).
+    // Falls back to the sign-up name above if Settings has no name.
     try {
       final profile = await Supabase.instance.client
           .from('profiles')
-          .select('currency')
+          .select('currency, name')
           .eq('id', userId)
           .single();
       _currencyCode = profile['currency'] ?? 'SGD';
+      final profileName = (profile['name'] as String?)?.trim();
+      if (profileName != null && profileName.isNotEmpty) {
+        _userName = profileName;
+      }
     } catch (_) {}
 
     final results = await Future.wait([
@@ -371,17 +389,20 @@ class _HomeScreenState extends State<HomeScreen> {
         toolbarHeight: 72,
         titleSpacing: 20,
         title: Row(children: [
-          Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [kAccent, Color(0xFF9C88FF)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          // App icon (same image as the launcher icon)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.asset(
+              'assets/images/app_icon.png', // ← change to your icon's file name
+              width: 40, height: 40,
+              fit: BoxFit.cover,
+              // If the image is missing, show a plain icon instead of an error
+              errorBuilder: (_, __, ___) => Container(
+                width: 40, height: 40,
+                color: kAccent,
+                child: const Icon(Icons.wallet, color: Colors.white, size: 20),
               ),
-              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(Icons.wallet, color: textP, size: 20),
           ),
           const SizedBox(width: 12),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -401,7 +422,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: Icon(Icons.settings_outlined, color: textS),
-            onPressed: () => context.push('/settings'),
+            // Reload when coming back so a new name/currency shows right away
+            onPressed: () async {
+              await context.push('/settings');
+              if (mounted) _load();
+            },
           ),
         ],
       ),
@@ -569,7 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           )),
                           const SizedBox(width: 8),
-                          VoiceLogButton(),
+                          const VoiceLogButton(),
                         ]),
                       ],
                     ),

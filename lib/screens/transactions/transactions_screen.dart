@@ -11,11 +11,11 @@
 //   • + FAB navigates to ConfirmLogScreen
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/models/category.dart';
-import 'package:tapsense/screens/confirm_log/confirm_log_screen.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key});
@@ -301,10 +301,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: kAccent,
         foregroundColor: dark ? kTextPrimary : Colors.white,
+        // Open Log Spend through the router (same as Home → Manual).
+        // Navigator.push skipped the router and crashed ConfirmLogScreen.
         onPressed: () async {
-          await Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const ConfirmLogScreen()));
-          _load();
+          await context.push('/confirm-log', extra: {
+            'triggerType': 'manual',
+            'merchantName': null,
+            'merchantUen': null,
+            'amount': null,
+            'rawQr': null,
+          });
+          if (mounted) _load();
         },
         child: const Icon(Icons.add),
       ),

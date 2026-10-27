@@ -15,10 +15,16 @@
 //
 // (Run this once in the Supabase SQL editor.)
 
+//
+// iOS note: push needs an APNs token, which a FREE Apple ID build never gets.
+// _saveToken() checks for it first and skips push quietly instead of failing.
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tapsense/app/theme.dart';
+import 'package:tapsense/services/debug_log.dart';
+import 'package:tapsense/services/platform_caps.dart';
 
 class FcmService {
   FcmService._();
@@ -48,7 +54,14 @@ class FcmService {
 
   // ── Token management ────────────────────────────────────────────────────────
 
+  // Supabase fires several auth events at startup (initial session, signed in,
+  // token refreshed) — remember what we saved so it only happens once.
+  static String? _savedKey;
+  static bool _saving = false;
+
   static Future<void> _saveToken(String userId) async {
+    if (_saving || _savedKey?.startsWith('$userId:') == true) return;
+    _saving = true;
     try {
       // Request permission (Android 13+ / iOS)
       final settings = await _fcm.requestPermission(
@@ -57,15 +70,39 @@ class FcmService {
         sound: true,
       );
 
+      dlog('PUSH', 'permission: ${settings.authorizationStatus.name}');
       if (settings.authorizationStatus == AuthorizationStatus.denied) return;
+
+      // iOS: getToken() fails without an APNs token (free Apple ID / simulator).
+      if (PlatformCaps.isIOS && !await _hasApnsToken()) {
+        dlog('PUSH',
+            'No APNs token (free Apple ID or simulator) — push disabled on this build');
+        return;
+      }
 
       final token = await _fcm.getToken();
       if (token == null) return;
 
       await _upsertToken(userId, token);
-    } catch (_) {
+      _savedKey = '$userId:$token';
+      dlog('PUSH', 'FCM token saved');
+    } catch (e, st) {
       // Non-fatal — app works without push
+      dlogError('PUSH', e, st);
+    } finally {
+      _saving = false;
     }
+  }
+
+  /// The APNs token can arrive a moment after launch on real iPhones,
+  /// so check twice before giving up.
+  static Future<bool> _hasApnsToken() async {
+    var apns = await _fcm.getAPNSToken();
+    if (apns == null) {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      apns = await _fcm.getAPNSToken();
+    }
+    return apns != null;
   }
 
   static Future<void> _upsertToken(String userId, String token) async {
@@ -77,7 +114,7 @@ class FcmService {
       );
     } catch (e) {
       // Log for debugging — check Supabase SQL: SELECT id, fcm_token FROM profiles
-      debugPrint('[FCM] token upsert failed: $e');
+      dlog('PUSH', 'token upsert failed: $e');
     }
   }
 
@@ -92,6 +129,13 @@ class FcmService {
     final context = _navigatorKey.currentContext;
     if (context == null) return;
 
+    _showOverlayBanner(context, title: title, body: body);
+  }
+
+  /// Show the in-app banner from anywhere (used by AppNotifications).
+  static void showBanner(String title, {String body = ''}) {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
     _showOverlayBanner(context, title: title, body: body);
   }
 

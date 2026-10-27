@@ -19,6 +19,7 @@ import 'package:tapsense/screens/wallet_events/wallet_events_screen.dart';
 import 'package:tapsense/widgets/rename_wallet_dialog.dart';
 import 'package:tapsense/screens/goals/goals_screen.dart';
 import 'package:tapsense/services/fcm_service.dart';
+import 'package:tapsense/screens/settings/debug_log_screen.dart';
 
 final _auth = Supabase.instance.client.auth;
 
@@ -48,6 +49,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/wallet-events',builder: (_, __) => const WalletEventsScreen()),
     GoRoute(path: '/rename-wallet',builder: (_, __) => const RenameWalletScreen()),
     GoRoute(path: '/goals', builder: (_, __) => const GoalsScreen()),
+    GoRoute(path: '/debug-log', builder: (context, state) => const DebugLogScreen()),
     // ────────────────────────────────────────────────────────────────────────
     GoRoute(
       path: '/confirm-log',

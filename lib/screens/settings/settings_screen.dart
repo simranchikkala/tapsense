@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:tapsense/config/env.dart';
 import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/services/auth_service.dart';
 import 'package:tapsense/widgets/rename_wallet_dialog.dart';
@@ -186,7 +188,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Settings saved ✓'),
-          backgroundColor: kSuccess,
+          backgroundColor: kAccent,
         ));
       }
     } catch (e) {
@@ -247,7 +249,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() { _goalMonth = ''; _savingGoal = false; });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Goal added ✓ — check Goals screen'),
-          backgroundColor: kSuccess,
+          backgroundColor: kAccent,
         ));
       }
     } catch (e) {
@@ -669,7 +671,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         setState(() => _wallet!['wallet_name'] = newName);
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text('Renamed to "$newName"'),
-                          backgroundColor: kSuccess,
+                          backgroundColor: kAccent,
                         ));
                       }
                     },
@@ -702,6 +704,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
+                if (!kReleaseMode || Env.debugMenu)
+                  ListTile(
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: const Text('Debug log'),
+                    onTap: () => context.push('/debug-log'),
+                  ),
 
                 // ── Danger zone ──────────────────────────────────
                 _SectionHeader('Danger Zone', textS),
@@ -722,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('All transactions deleted'),
-                            backgroundColor: kSuccess,
+                            backgroundColor: kAccent,
                           ),
                         );
                       }

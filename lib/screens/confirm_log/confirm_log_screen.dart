@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/models/category.dart';
 import 'package:tapsense/models/transaction.dart';
+import 'package:tapsense/services/app_notifications.dart';
 import 'package:tapsense/services/budget_service.dart';
 import 'package:tapsense/services/transaction_service.dart';
 
@@ -48,7 +49,16 @@ class _ConfirmLogScreenState extends State<ConfirmLogScreen> {
     if (_seeded) return;
     _seeded = true;
 
-    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    // Opened via context.push('/confirm-log', extra: {...}).
+    // If something opens it another way (e.g. Navigator.push), don't crash —
+    // just start with an empty manual entry.
+    Map<String, dynamic>? extra;
+    try {
+      final e = GoRouterState.of(context).extra;
+      if (e is Map) extra = Map<String, dynamic>.from(e);
+    } catch (_) {
+      extra = null;
+    }
     if (extra != null) {
       _triggerType     = extra['triggerType'] as String? ?? 'manual';
       _rawQr           = extra['rawQr'] as String?;
@@ -65,8 +75,17 @@ class _ConfirmLogScreenState extends State<ConfirmLogScreen> {
         if (raw != null) _amountCtrl.text = raw.abs().toStringAsFixed(2);
       }
 
+      // Category suggested by voice log
+      final catId = extra['categoryId'] as String?;
+      if (catId != null && kCategories.any((c) => c.id == catId)) {
+        _categoryId = catId;
+      }
+
       // Pre-select payment mode from trigger
-      if (_rawQr != null) {
+      final suggestedMode = extra['paymentMode'] as String?;
+      if (suggestedMode != null && _paymentModes.contains(suggestedMode)) {
+        _paymentMode = suggestedMode;
+      } else if (_rawQr != null) {
         _paymentMode = 'sgqr';
       } else if (_triggerType == 'nfc') {
         _paymentMode = 'nfc';
@@ -174,6 +193,21 @@ class _ConfirmLogScreenState extends State<ConfirmLogScreen> {
           categoryId: _categoryId,
         );
       }
+
+      // ── "Category over budget" notification (Wallet Activity → Notifications)
+      try {
+        final r = await BudgetService.checkCategory(
+          userId:     userId,
+          categoryId: _categoryId,
+        );
+        if (r != null && r.overBudget) {
+          await AppNotifications.categoryOverBudget(
+            BudgetService.catLabel(_categoryId),
+            spent: r.spent,
+            cap:   r.cap,
+          );
+        }
+      } catch (_) {}
 
       if (mounted) context.pop();
     } catch (e) {

@@ -18,12 +18,95 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:tapsense/models/transaction.dart';
 import 'package:tapsense/models/category.dart';
+import 'package:tapsense/config/env.dart';
+import 'package:tapsense/services/debug_log.dart';
+
+/// Result of parsing a voice log.
+class VoiceSpend {
+  VoiceSpend({
+    required this.transcript,
+    this.amount,
+    this.merchant,
+    this.categoryId = 'other',
+    this.paymentMode,
+    this.usedAi = false,
+  });
+
+  final String transcript;
+  final double? amount;
+  final String? merchant;
+  final String categoryId;
+  final String? paymentMode;
+  final bool usedAi;
+
+  /// Short text for the "Voice log recorded" notification.
+  String get summary {
+    final parts = <String>[
+      if (amount != null) 'S\$${amount!.toStringAsFixed(2)}',
+      if (merchant != null) 'at $merchant',
+    ];
+    return parts.isEmpty ? '"$transcript"' : parts.join(' ');
+  }
+
+  /// Built-in parser (no API key needed): first number = amount,
+  /// words after "at" / "from" / "@" = merchant, category by name match.
+  factory VoiceSpend.basic(String transcript) {
+    final lower = transcript.toLowerCase();
+
+    final m = RegExp(r'(\d+(?:[.,]\d{1,2})?)').firstMatch(lower);
+    final amount =
+        m == null ? null : double.tryParse(m.group(1)!.replaceAll(',', '.'));
+
+    String? merchant;
+    final mm = RegExp(r'\b(?:at|from|@)\s+([a-z0-9&\x27\- ]{2,40})')
+        .firstMatch(lower);
+    if (mm != null) {
+      merchant = mm
+          .group(1)!
+          .replaceAll(RegExp(r'\b(for|with|using|by|paid|today|yesterday)\b.*$'), '')
+          .trim();
+      if (merchant.isEmpty) {
+        merchant = null;
+      } else {
+        merchant = merchant
+            .split(' ')
+            .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+            .join(' ');
+      }
+    }
+
+    var categoryId = 'other';
+    for (final c in kCategories) {
+      if (lower.contains(c.name.toLowerCase())) {
+        categoryId = c.id;
+        break;
+      }
+    }
+
+    String? mode;
+    if (lower.contains('cash')) {
+      mode = 'cash';
+    } else if (lower.contains('paynow') || lower.contains('qr')) {
+      mode = 'sgqr';
+    } else if (lower.contains('card')) {
+      mode = 'card';
+    }
+
+    return VoiceSpend(
+      transcript: transcript,
+      amount: amount,
+      merchant: merchant,
+      categoryId: categoryId,
+      paymentMode: mode,
+    );
+  }
+}
 
 class AiService {
   // ── API keys ─────────────────────────────────────────────────────────────────
   // Replace with real keys when available.
   // Keep these in a secrets file / env — don't commit real keys.
-  static const _geminiKey  = '';   // e.g. 'AIzaSy...'
+  // Gemini key comes from env.json → Env.geminiApiKey (used in _callGemini).
   static const _openaiKey  = '';   // e.g. 'sk-...'
 
   // ── Public entry point ────────────────────────────────────────────────────────
@@ -36,8 +119,8 @@ class AiService {
 
     final prompt = _buildPrompt(weekTxs);
 
-    if (_geminiKey.isNotEmpty) {
-      final result = await _callGemini(prompt);
+    if (Env.geminiApiKey.isNotEmpty) {
+      final result = await _callGemini(prompt, maxTokens: 1024);
       if (result != null) return result;
     }
 
@@ -80,40 +163,129 @@ By category: $catSummary
 ''';
   }
 
-  // ── Gemini Flash (free via Google AI Studio) ──────────────────────────────────
-  static Future<String?> _callGemini(String prompt) async {
+  // ── Gemini (free tier via Google AI Studio) ───────────────────────────────────
+  //
+  // Fixes vs the old version:
+  //  - the key was written as '$Env.geminiApiKey', which inserts the text
+  //    "Env.geminiApiKey" instead of the key → every call failed silently.
+  //    The key now goes in the x-goog-api-key header.
+  //  - 'gemini-1.5-flash' has been shut down; the model now comes from
+  //    Env.geminiModel (change it in env.json if Google retires it).
+  //  - failures are written to the Debug log instead of being swallowed.
+  static Future<String?> _callGemini(
+    String prompt, {
+    bool jsonOutput = false,
+    double temperature = 0.7,
+    int maxTokens = 1024,
+  }) async {
+    if (Env.geminiApiKey.isEmpty) return null;
     try {
-      const model = 'gemini-1.5-flash';
       final url = Uri.parse(
           'https://generativelanguage.googleapis.com/v1beta/models/'
-          '$model:generateContent?key=$_geminiKey');
+          '${Env.geminiModel}:generateContent');
       final body = jsonEncode({
         'contents': [
           {
-            'parts': [{'text': prompt}]
+            'parts': [
+              {'text': prompt}
+            ]
           }
         ],
         'generationConfig': {
-          'temperature': 0.7,
-          'maxOutputTokens': 200,
+          'temperature': temperature,
+          'maxOutputTokens': maxTokens,
+          if (jsonOutput) 'responseMimeType': 'application/json',
         },
       });
 
       final res = await http
           .post(url,
-              headers: {'Content-Type': 'application/json'}, body: body)
-          .timeout(const Duration(seconds: 15));
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': Env.geminiApiKey,
+              },
+              body: body)
+          .timeout(const Duration(seconds: 20));
 
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body) as Map<String, dynamic>;
         final candidates = json['candidates'] as List?;
-        final text = candidates?.first?['content']?['parts']
-                ?.first?['text'] as String?;
-        if (text != null && text.isNotEmpty) return text.trim();
+        final List? parts = (candidates?.isNotEmpty == true)
+            ? (candidates!.first['content']?['parts'] as List?)
+            : null;
+        final text = parts
+            ?.map((p) => (p as Map)['text']?.toString() ?? '')
+            .join()
+            .trim();
+        if (text != null && text.isNotEmpty) return text;
+        dlog('AI', 'Gemini returned no text: ${res.body}');
+      } else {
+        final snippet =
+            res.body.length > 300 ? res.body.substring(0, 300) : res.body;
+        dlog('AI', 'Gemini HTTP ${res.statusCode} (${Env.geminiModel}): $snippet');
       }
-    } catch (_) {}
+    } catch (e, st) {
+      dlogError('AI', e, st);
+    }
     return null;
   }
+
+  // ── Voice log parsing ─────────────────────────────────────────────────────────
+
+  /// Turns a spoken sentence like "six fifty for chicken rice at the hawker
+  /// centre, paid cash" into amount / merchant / category / payment mode.
+  /// Uses Gemini when a key is set, otherwise (or on failure) a simple
+  /// built-in parser, so voice logging always works.
+  static Future<VoiceSpend> parseSpend(String transcript) async {
+    final fallback = VoiceSpend.basic(transcript);
+    if (Env.geminiApiKey.isEmpty || transcript.trim().isEmpty) return fallback;
+
+    final cats = kCategories.map((c) => '${c.id} (${c.name})').join(', ');
+    final prompt = '''
+Extract one spending entry from this voice note recorded in Singapore.
+Voice note: "$transcript"
+
+Reply with JSON only, using exactly these keys:
+{"amount": number or null, "merchant": string or null, "category_id": string, "payment_mode": string or null}
+
+Rules:
+- amount: the price in Singapore dollars as a positive number ("six fifty" = 6.5). null if no amount was said.
+- merchant: the shop, stall or person paid, if mentioned. null otherwise.
+- category_id: one of these ids: $cats. Use "other" if unsure.
+- payment_mode: one of manual, sgqr, nfc, card, cash, other — only if the user said how they paid
+  (PayNow/QR = sgqr, tapped phone/watch = nfc, credit/debit card = card). null otherwise.
+''';
+
+    final text = await _callGemini(prompt, jsonOutput: true, temperature: 0.1);
+    if (text == null) return fallback;
+    try {
+      final cleaned = text
+          .replaceAll(RegExp(r'^```(json)?', multiLine: true), '')
+          .replaceAll('```', '')
+          .trim();
+      final j = jsonDecode(cleaned) as Map<String, dynamic>;
+      final amount = (j['amount'] as num?)?.toDouble().abs();
+      final catId = j['category_id']?.toString();
+      final mode = j['payment_mode']?.toString();
+      return VoiceSpend(
+        transcript: transcript,
+        amount: amount ?? fallback.amount,
+        merchant: (j['merchant']?.toString().trim().isNotEmpty == true)
+            ? j['merchant'].toString().trim()
+            : fallback.merchant,
+        categoryId: kCategories.any((c) => c.id == catId)
+            ? catId!
+            : fallback.categoryId,
+        paymentMode: _paymentModes.contains(mode) ? mode : null,
+        usedAi: true,
+      );
+    } catch (e) {
+      dlog('AI', 'Could not read Gemini JSON: $text');
+      return fallback;
+    }
+  }
+
+  static const _paymentModes = ['manual', 'sgqr', 'nfc', 'card', 'cash', 'other'];
 
   // ── OpenAI gpt-3.5-turbo (cheapest) ──────────────────────────────────────────
   static Future<String?> _callOpenAI(String prompt) async {
