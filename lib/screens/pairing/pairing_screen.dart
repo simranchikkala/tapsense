@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/services/bluetooth_service.dart';
+import 'package:tapsense/widgets/battery_badge.dart';
 
 class PairingScreen extends StatefulWidget {
   const PairingScreen({super.key});
@@ -129,6 +130,9 @@ class _PairingScreenState extends State<PairingScreen> {
           const Text('Your TapSense wallet is ready',
             style: TextStyle(color: kTextSecondary, fontSize: 13),
             textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          // Battery % arrives a moment after connecting; shows when known.
+          const BatteryBadge(showLabel: true, fontSize: 13),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,

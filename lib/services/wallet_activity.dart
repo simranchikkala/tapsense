@@ -18,7 +18,8 @@ import 'debug_log.dart';
 class ActivityItem {
   ActivityItem({required this.type, required this.label, required this.at});
 
-  /// terminalTap | cardRemoved | buttonPressed | buttonReleased | unknown | buzz
+  /// terminalTap | cardRemoved | buttonPressed | buttonReleased | unknown |
+  /// buzz | voiceNote | battery
   final String type;
   final String label;
   final DateTime at;
@@ -41,9 +42,30 @@ class WalletActivity {
   StreamSubscription<WalletEvent>? _eventSub;
   StreamSubscription<int>? _buzzSub;
 
+  bool _batteryLowNotified = false;
+  bool _batteryListening = false;
+
   void start() {
     _eventSub ??= walletBluetooth.events.listen(_onEvent);
     _buzzSub ??= walletBluetooth.buzzes.listen(_onBuzz);
+    if (!_batteryListening) {
+      _batteryListening = true;
+      walletBluetooth.batteryPercent.addListener(_onBattery);
+    }
+  }
+
+  /// "Wallet battery low" fires once when it drops below 15 %, and can fire
+  /// again only after the wallet has been charged back above 20 %.
+  void _onBattery() {
+    final pct = walletBluetooth.batteryPercent.value;
+    if (pct == null) return;
+    if (pct < 15 && !_batteryLowNotified) {
+      _batteryLowNotified = true;
+      AppNotifications.walletBatteryLow(pct);
+      record(type: 'battery', label: 'Wallet battery low ($pct%)');
+    } else if (pct >= 20) {
+      _batteryLowNotified = false;
+    }
   }
 
   void _onEvent(WalletEvent e) {

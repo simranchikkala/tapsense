@@ -1,0 +1,105 @@
+# TapSense — Codemagic CI
+# Setup: Codemagic → app → Environment variables → group "tapsense_env"
+#        → secure variable ENV_JSON = full contents of your env.json
+
+workflows:
+
+  # 1) FREE — no Apple account needed.
+  #    Builds an unsigned iOS app on every push to main, so you know iOS still
+  #    compiles without anyone touching a Mac. (Can't be installed on a phone.)
+  ios-compile-check:
+    name: iOS compile check (unsigned)
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - tapsense_env
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+    scripts:
+      - name: Write env.json
+        script: echo "$ENV_JSON" > env.json
+      - name: Get packages
+        script: flutter pub get
+      - name: Build iOS (no code signing)
+        script: flutter build ios --release --no-codesign --dart-define-from-file=env.json
+
+  # 2) FREE — no Apple account, no Mac.
+  #    Builds an UNSIGNED .ipa you download from Codemagic and install on an
+  #    iPhone from Windows with Sideloadly + a free Apple ID (re-install every 7 days).
+  #    Run it manually: Codemagic → Start new build → "iOS → IPA for sideloading".
+  #    Tip: put "DEBUG_MENU": "true" in ENV_JSON so the Debug log is visible.
+  ios-sideload-ipa:
+    name: iOS → IPA for sideloading (unsigned)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - tapsense_env
+    scripts:
+      - name: Write env.json
+        script: echo "$ENV_JSON" > env.json
+      - name: Get packages
+        script: flutter pub get
+      - name: Build iOS app (no code signing)
+        script: flutter build ios --release --no-codesign --dart-define-from-file=env.json
+      - name: Package as .ipa
+        script: |
+          cd build/ios/iphoneos
+          rm -rf Payload TapSense-unsigned.ipa
+          mkdir Payload
+          cp -R Runner.app Payload/
+          zip -qr TapSense-unsigned.ipa Payload
+    artifacts:
+      - build/ios/iphoneos/TapSense-unsigned.ipa
+
+  # 3) LATER — needs the paid Apple Developer account (US$99/yr).
+  #    Builds, signs and uploads to TestFlight. Run manually from Codemagic.
+  ios-testflight:
+    name: iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    integrations:
+      app_store_connect: TapSense ASC Key      # name of the API key added in Codemagic
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - tapsense_env
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.yourname.tapsense   # <- your bundle ID
+      vars:
+        APP_STORE_APPLE_ID: 0000000000             # <- App Store Connect → App Information → Apple ID
+    scripts:
+      - name: Write env.json
+        script: echo "$ENV_JSON" > env.json
+      - name: Get packages
+        script: flutter pub get
+      - name: Apply signing profiles
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo 0)
+          flutter build ipa --release \
+            --build-number=$((LATEST + 1)) \
+            --export-options-plist=/Users/builder/export_options.plist \
+            --dart-define-from-file=env.json \
+            --dart-define=DEBUG_MENU=true
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

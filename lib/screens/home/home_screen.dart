@@ -18,6 +18,8 @@ import 'package:tapsense/models/transaction.dart';
 import 'package:tapsense/services/bluetooth_service.dart';
 import 'package:tapsense/services/transaction_service.dart';
 import 'package:tapsense/services/budget_service.dart';
+import 'package:tapsense/services/voice_drafts.dart';
+import 'package:tapsense/widgets/battery_badge.dart';
 import 'package:tapsense/widgets/voice_log_button.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -46,14 +48,33 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _walletSub = walletBluetooth.events.listen((event) {
       if (!mounted) return;
-      // Card taps already show the "Device tapped by card activation" banner
-      // (AppNotifications) — don't show a second message for them.
-      if (event.type == WalletEventType.terminalTap) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Wallet: ${event.label}'),
-        backgroundColor: kAccent,
-        duration: const Duration(seconds: 2),
-      ));
+      final messenger = ScaffoldMessenger.of(context);
+      switch (event.type) {
+        // Card taps already show the "Device tapped by card activation" banner.
+        case WalletEventType.terminalTap:
+          return;
+        // The wallet records voice notes by itself — just say so while the
+        // button is held. Never open the phone's voice sheet for this.
+        case WalletEventType.buttonPressed:
+          messenger.hideCurrentSnackBar();
+          messenger.showSnackBar(const SnackBar(
+            content: Row(children: [
+              Icon(Icons.mic_rounded, color: Colors.white, size: 16),
+              SizedBox(width: 8),
+              Text('Recording on wallet…'),
+            ]),
+            backgroundColor: kAccent,
+            duration: Duration(seconds: 16), // longest note ≈ 15 s
+          ));
+        case WalletEventType.buttonReleased:
+          messenger.hideCurrentSnackBar();
+        default:
+          messenger.showSnackBar(SnackBar(
+            content: Text('Wallet: ${event.label}'),
+            backgroundColor: kAccent,
+            duration: const Duration(seconds: 2),
+          ));
+      }
     });
   }
 
@@ -393,7 +414,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Image.asset(
-              'assets/images/app_icon.png', // ← change to your icon's file name
+              'assets/images/app_iconC.png', // ← change to your icon's file name
               width: 40, height: 40,
               fit: BoxFit.cover,
               // If the image is missing, show a plain icon instead of an error
@@ -502,6 +523,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 20),
                   _WalletCard(),
+                  _VoiceDraftsCard(),
                   const SizedBox(height: 20),
 
                   // ── Action buttons (4) ──────────────────────────────────
@@ -652,31 +674,45 @@ class _HomeScreenState extends State<HomeScreen> {
 class _WalletCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    // Rebuilds by itself when the wallet connects/disconnects or the battery changes.
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        walletBluetooth.connected,
+        walletBluetooth.batteryPercent,
+        walletBluetooth.reconnecting,
+      ]),
+      builder: (context, _) => _buildCard(context),
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
     final dark    = Theme.of(context).brightness == Brightness.dark;
     final surface = dark ? kSurface : kSurfaceLight;
     final border  = dark ? kBorder  : kBorderLight;
     final textP   = dark ? kTextPrimary   : kTextPrimaryLight;
     final textS   = dark ? kTextSecondary : kTextSecondaryLight;
+    final ok      = dark ? kSuccess : kSuccessLight;
 
-    final connected = walletBluetooth.isConnected;
+    final connected = walletBluetooth.connected.value;
+    final reconnecting = !connected && walletBluetooth.reconnecting.value;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: connected ? kSuccess.withOpacity(0.4) : border),
+          color: connected ? ok.withOpacity(0.4) : border),
       ),
       child: Row(children: [
         Container(
           width: 40, height: 40,
           decoration: BoxDecoration(
-            color: (connected ? kSuccess : kAccent).withOpacity(0.15),
+            color: (connected ? ok : kAccent).withOpacity(0.15),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
             connected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-            color: connected ? kSuccess : kAccent,
+            color: connected ? ok : kAccent,
             size: 20,
           ),
         ),
@@ -684,17 +720,35 @@ class _WalletCard extends StatelessWidget {
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(connected ? 'Wallet Connected' : 'No Wallet Paired',
+            Text(
+              connected
+                ? 'Wallet Connected'
+                : reconnecting
+                  ? 'Wallet Not in Range'
+                  : 'No Wallet Paired',
               style: TextStyle(
                 color: textP, fontWeight: FontWeight.w600, fontSize: 14)),
             Text(
               connected
                 ? 'Listening for payment events'
-                : 'Pair your TapSense wallet',
+                : reconnecting
+                  ? 'Reconnects automatically when nearby'
+                  : 'Pair your TapSense wallet',
               style: TextStyle(color: textS, fontSize: 12)),
+            if (connected) ...[
+              const SizedBox(height: 4),
+              const BatteryBadge(showLabel: true, fontSize: 11),
+            ],
           ],
         )),
-        if (!connected)
+        if (reconnecting)
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: SizedBox(
+              width: 16, height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: kAccent)),
+          ),
+        if (!connected && !reconnecting)
           ElevatedButton(
             onPressed: () => context.push('/pairing'),
             style: ElevatedButton.styleFrom(
@@ -708,10 +762,65 @@ class _WalletCard extends StatelessWidget {
           ),
         if (connected)
           IconButton(
-            icon: const Icon(Icons.vibration, color: kSuccess),
+            tooltip: 'Test buzz',
+            icon: Icon(Icons.vibration, color: ok),
             onPressed: walletBluetooth.testBuzz,
           ),
       ]),
+    );
+  }
+}
+
+// ── Wallet voice logs waiting for review ──────────────────────────────────────
+
+class _VoiceDraftsCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<List<VoiceDraft>>(
+      valueListenable: VoiceDrafts.instance.drafts,
+      builder: (context, drafts, _) {
+        if (drafts.isEmpty) return const SizedBox.shrink();
+        final dark  = Theme.of(context).brightness == Brightness.dark;
+        final textP = dark ? kTextPrimary   : kTextPrimaryLight;
+        final textS = dark ? kTextSecondary : kTextSecondaryLight;
+        final n = drafts.length;
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: GestureDetector(
+            onTap: () => context.push('/voice-review'),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: kOrange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: kOrange.withOpacity(0.5)),
+              ),
+              child: Row(children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: kOrange.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.mic_rounded, color: kOrange, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$n voice log${n == 1 ? '' : 's'} from your wallet to review',
+                        style: TextStyle(
+                            color: textP, fontWeight: FontWeight.w600, fontSize: 14)),
+                    Text('Tap to play, confirm or discard',
+                        style: TextStyle(color: textS, fontSize: 12)),
+                  ],
+                )),
+                Icon(Icons.chevron_right, color: textS),
+              ]),
+            ),
+          ),
+        );
+      },
     );
   }
 }

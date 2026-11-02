@@ -14,6 +14,7 @@ import 'package:tapsense/models/category.dart';
 import 'package:tapsense/models/transaction.dart';
 import 'package:tapsense/services/app_notifications.dart';
 import 'package:tapsense/services/budget_service.dart';
+import 'package:tapsense/services/payment_apps.dart';
 import 'package:tapsense/services/transaction_service.dart';
 
 const _paymentModes = ['manual', 'sgqr', 'nfc', 'card', 'cash', 'other'];
@@ -73,6 +74,16 @@ class _ConfirmLogScreenState extends State<ConfirmLogScreen> {
       if (amount != null) {
         final raw = amount is double ? amount : double.tryParse(amount.toString());
         if (raw != null) _amountCtrl.text = raw.abs().toStringAsFixed(2);
+      }
+
+      // Wallet voice notes keep the time they were RECORDED, not confirmed
+      final created = extra['createdAt'];
+      final createdAt = created is DateTime
+          ? created
+          : DateTime.tryParse(created?.toString() ?? '');
+      if (createdAt != null) {
+        final local = createdAt.toLocal();
+        _txDate = local.isAfter(DateTime.now()) ? DateTime.now() : local;
       }
 
       // Category suggested by voice log
@@ -209,7 +220,13 @@ class _ConfirmLogScreenState extends State<ConfirmLogScreen> {
         }
       } catch (_) {}
 
-      if (mounted) context.pop();
+      // QR spend logged → open the bank / payment app to pay (Android).
+      if (_rawQr != null && mounted) {
+        await PaymentApps.offerAfterScan(context);
+      }
+
+      // true = saved (the voice review screen deletes the draft on this)
+      if (mounted) context.pop(true);
     } catch (e) {
       setState(() { _saving = false; _err = 'Save failed: $e'; });
     }

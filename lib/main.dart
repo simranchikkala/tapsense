@@ -13,6 +13,11 @@ import 'package:tapsense/firebase_options.dart';
 import 'package:tapsense/services/debug_log.dart';
 import 'package:tapsense/services/fcm_service.dart';
 import 'package:tapsense/services/wallet_activity.dart';
+import 'package:tapsense/services/voice_drafts.dart';
+import 'package:tapsense/services/wallet_voice_sync.dart';
+import 'package:tapsense/services/payment_apps.dart';
+import 'package:tapsense/services/bluetooth_service.dart';
+
 
 // ── Background message handler (must be top-level, not a class method) ────────
 @pragma('vm:entry-point')
@@ -64,7 +69,11 @@ void main() async {
   WalletActivity.instance.start();
   // ── Push (FCM) ──────────────────────────────────────────────────────────────
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await VoiceDrafts.instance.load();
+  WalletVoiceSync.instance.start();
 
+  await PaymentApps.load();
+  walletBluetooth.initAutoReconnect();
   // Register FCM token with Supabase once the user is signed in.
   // FcmService listens to auth state changes and handles this automatically.
   FcmService.init();

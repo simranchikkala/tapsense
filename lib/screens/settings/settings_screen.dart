@@ -6,6 +6,9 @@ import 'package:tapsense/config/env.dart';
 import 'package:tapsense/app/theme.dart';
 import 'package:tapsense/services/auth_service.dart';
 import 'package:tapsense/widgets/rename_wallet_dialog.dart';
+import 'package:tapsense/widgets/battery_badge.dart';
+import 'package:tapsense/services/payment_apps.dart';
+import 'package:tapsense/services/bluetooth_service.dart';
 
 // ── Currency list ─────────────────────────────────────────────────────────────
 class CurrencyOption {
@@ -651,11 +654,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: Text('Rename wallet',
                         style: TextStyle(color: textP, fontSize: 14,
                             fontWeight: FontWeight.w500)),
-                    subtitle: Text(
-                      _wallet != null
-                          ? _wallet!['wallet_name']?.toString() ?? 'My Wallet'
-                          : 'No wallet paired',
-                      style: TextStyle(color: textM, fontSize: 12)),
+                    subtitle: Row(children: [
+                      Flexible(child: Text(
+                        _wallet != null
+                            ? _wallet!['wallet_name']?.toString() ?? 'My Wallet'
+                            : 'No wallet paired',
+                        style: TextStyle(color: textM, fontSize: 12),
+                        overflow: TextOverflow.ellipsis)),
+                      const SizedBox(width: 8),
+                      const BatteryBadge(fontSize: 11),
+                    ]),
                     trailing: Icon(Icons.chevron_right, color: textM),
                     onTap: _wallet == null ? null : () async {
                       final newName = await showDialog<String>(
@@ -675,6 +683,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ));
                       }
                     },
+                  ),
+                ),
+
+                // Payment app opened after a QR scan (Android only)
+                if (PaymentApps.supported) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: border),
+                    ),
+                    child: ValueListenableBuilder<PaymentAppChoice?>(
+                      valueListenable: PaymentApps.saved,
+                      builder: (context, choice, _) => ListTile(
+                        leading: Icon(Icons.account_balance_outlined,
+                            color: kAccent),
+                        title: Text('Payment app',
+                            style: TextStyle(color: textP, fontSize: 14,
+                                fontWeight: FontWeight.w500)),
+                        subtitle: Text(
+                            choice?.label ?? 'Ask every time after a QR scan',
+                            style: TextStyle(color: textM, fontSize: 12)),
+                        trailing: choice == null
+                            ? Icon(Icons.chevron_right, color: textM)
+                            : TextButton(
+                                onPressed: () => PaymentApps.remember(null),
+                                child: const Text('Reset',
+                                    style: TextStyle(color: kAccent))),
+                        onTap: () async {
+                          final pick = await showPaymentAppPicker(context,
+                              settingsMode: true);
+                          if (pick != null) {
+                            await PaymentApps.remember(PaymentAppChoice(
+                                pick.app.package, pick.app.label));
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+
+                // Forget the paired wallet (stops auto-reconnect)
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: border),
+                  ),
+                  child: ListTile(
+                    leading: Icon(Icons.link_off, color: textM),
+                    title: Text('Forget wallet',
+                        style: TextStyle(color: textP, fontSize: 14,
+                            fontWeight: FontWeight.w500)),
+                    subtitle: Text('Stop reconnecting to this wallet',
+                        style: TextStyle(color: textM, fontSize: 12)),
+                    onTap: () => _confirmAction(
+                      'Forget wallet?',
+                      'You will need to pair it again.',
+                      () => walletBluetooth.forgetWallet(),
+                    ),
                   ),
                 ),
 
@@ -704,12 +774,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
-                if (!kReleaseMode || Env.debugMenu)
-                  ListTile(
-                    leading: const Icon(Icons.bug_report_outlined),
-                    title: const Text('Debug log'),
-                    onTap: () => context.push('/debug-log'),
+                if (!kReleaseMode || Env.debugMenu) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: border),
+                    ),
+                    child: ListTile(
+                      leading: Icon(Icons.bug_report_outlined, color: kAccent),
+                      title: Text('Debug log',
+                          style: TextStyle(color: textP, fontSize: 14,
+                              fontWeight: FontWeight.w500)),
+                      trailing: Icon(Icons.chevron_right, color: textM),
+                      onTap: () => context.push('/debug-log'),
+                    ),
                   ),
+                ],
 
                 // ── Danger zone ──────────────────────────────────
                 _SectionHeader('Danger Zone', textS),

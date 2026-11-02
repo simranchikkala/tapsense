@@ -11,6 +11,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tapsense/app/theme.dart';
@@ -124,8 +125,31 @@ class _WalletEventsScreenState extends State<WalletEventsScreen>
 
   // ── Debug simulation ────────────────────────────────────────────────────────
 
-  void _simulate(String action) {
+  Future<void> _simulate(String action) async {
     switch (action) {
+      case 'voice':
+        try {
+          final data = await rootBundle.load('assets/debug/sample_voice.wav');
+          walletBluetooth.debugSimulateVoiceNote(data.buffer.asUint8List());
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Simulated wallet note — syncing… (see Home)'),
+              backgroundColor: kAccent,
+            ));
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('assets/debug/sample_voice.wav missing — '
+                  'add it and list assets/debug/ in pubspec.yaml'),
+              backgroundColor: kError,
+            ));
+          }
+        }
+      case 'battery10':
+        walletBluetooth.debugSimulateBattery(10);
+      case 'battery80':
+        walletBluetooth.debugSimulateBattery(80);
       case 'tap':
         walletBluetooth.debugSimulateEvent(0x02);
       case 'removed':
@@ -210,6 +234,10 @@ class _WalletEventsScreenState extends State<WalletEventsScreen>
                 _menuItem('button', 'Simulate button press', textP),
                 _menuItem('buzz1', 'Simulate buzz (normal)', textP),
                 _menuItem('buzz3', 'Simulate buzz (over limit)', textP),
+                const PopupMenuDivider(),
+                _menuItem('voice', 'Simulate wallet voice note', textP),
+                _menuItem('battery10', 'Simulate battery 10%', textP),
+                _menuItem('battery80', 'Simulate battery 80%', textP),
               ],
             ),
           if (_tabs.index == 1 && unread > 0)
@@ -244,6 +272,8 @@ class _WalletEventsScreenState extends State<WalletEventsScreen>
         'buttonReleased' =>
           (icon: Icons.touch_app_outlined, color: kInfo),
         'buzz' => (icon: Icons.vibration, color: kOrange),
+        'voiceNote' => (icon: Icons.mic_rounded, color: kOrange),
+        'battery' => (icon: Icons.battery_alert_rounded, color: kError),
         _ => (icon: Icons.help_outline, color: kTextMuted),
       };
 

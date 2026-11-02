@@ -74,6 +74,11 @@ class AppNotifications {
         showBanner: showBanner,
       );
 
+  static Future<void> walletBatteryLow(int pct) => notify(
+        'Wallet battery low',
+        body: 'Your TapSense wallet is at $pct%. Charge it with USB-C soon.',
+      );
+
   static Future<void> qrScanned(String merchant) => notify(
         'QR scanned',
         body: merchant.isEmpty ? 'Payment QR scanned.' : 'Paying $merchant',

@@ -27,10 +27,13 @@ dependencies:
   firebase_messaging: ^15.1.3
   firebase_crashlytics: ^4.3.10
   speech_to_text: ^7.5.0
+  just_audio: ^0.10.6
+  path_provider: ^2.1.6
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/debug/
 dev_dependencies:
   flutter_launcher_icons: ^0.14.4

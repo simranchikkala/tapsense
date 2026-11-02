@@ -15,6 +15,7 @@
 // Drop in your key when you get stipend / uni access.
 
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:tapsense/models/transaction.dart';
 import 'package:tapsense/models/category.dart';
@@ -174,9 +175,11 @@ By category: $catSummary
   //  - failures are written to the Debug log instead of being swallowed.
   static Future<String?> _callGemini(
     String prompt, {
+    List<Map<String, dynamic>> extraParts = const [],
     bool jsonOutput = false,
     double temperature = 0.7,
     int maxTokens = 1024,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     if (Env.geminiApiKey.isEmpty) return null;
     try {
@@ -187,6 +190,7 @@ By category: $catSummary
         'contents': [
           {
             'parts': [
+              ...extraParts, // e.g. audio for wallet voice notes
               {'text': prompt}
             ]
           }
@@ -205,7 +209,7 @@ By category: $catSummary
                 'x-goog-api-key': Env.geminiApiKey,
               },
               body: body)
-          .timeout(const Duration(seconds: 20));
+          .timeout(timeout);
 
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body) as Map<String, dynamic>;
@@ -258,12 +262,74 @@ Rules:
 
     final text = await _callGemini(prompt, jsonOutput: true, temperature: 0.1);
     if (text == null) return fallback;
+    return _spendFromJson(text, transcript: transcript, fallback: fallback);
+  }
+
+  /// Shown when a wallet voice note couldn't be transcribed.
+  static const voicePlaceholder = '(voice note — tap to play)';
+
+  /// Wallet voice notes: sends the WAV itself to Gemini, which transcribes
+  /// and extracts the spend in one call. No key / failure → empty draft the
+  /// user fills in by hand (they can still play the recording).
+  static Future<VoiceSpend> parseSpendAudio(File wav) async {
+    final empty = VoiceSpend(transcript: voicePlaceholder);
+    if (Env.geminiApiKey.isEmpty) return empty;
+
+    final bytes = await wav.readAsBytes();
+    final cats = kCategories.map((c) => '${c.id} (${c.name})').join(', ');
+    final prompt = '''
+The attached audio is a short voice note recorded in Singapore by someone logging what they just spent.
+Transcribe it, then extract one spending entry.
+
+Reply with JSON only, using exactly these keys:
+{"transcript": string, "amount": number or null, "merchant": string or null, "category_id": string, "payment_mode": string or null}
+
+Rules:
+- transcript: what was said, word for word. Empty string if nothing intelligible was said.
+- amount: the price in Singapore dollars as a positive number ("six fifty" = 6.5). null if no amount was said.
+- merchant: the shop, stall or person paid, if mentioned. null otherwise.
+- category_id: one of these ids: $cats. Use "other" if unsure.
+- payment_mode: one of manual, sgqr, nfc, card, cash, other — only if the user said how they paid
+  (PayNow/QR = sgqr, tapped phone/watch = nfc, credit/debit card = card). null otherwise.
+''';
+
+    final text = await _callGemini(
+      prompt,
+      extraParts: [
+        {
+          'inline_data': {
+            'mime_type': 'audio/wav',
+            'data': base64Encode(bytes),
+          }
+        }
+      ],
+      jsonOutput: true,
+      temperature: 0.1,
+      timeout: const Duration(seconds: 45),
+    );
+    if (text == null) return empty;
+
     try {
-      final cleaned = text
-          .replaceAll(RegExp(r'^```(json)?', multiLine: true), '')
-          .replaceAll('```', '')
-          .trim();
-      final j = jsonDecode(cleaned) as Map<String, dynamic>;
+      final j = jsonDecode(_stripFences(text)) as Map<String, dynamic>;
+      final transcript = j['transcript']?.toString().trim() ?? '';
+      return _spendFromJson(text,
+          transcript: transcript.isEmpty ? voicePlaceholder : transcript,
+          fallback: empty);
+    } catch (_) {
+      dlog('AI', 'Could not read Gemini JSON (audio): $text');
+      return empty;
+    }
+  }
+
+  static String _stripFences(String text) => text
+      .replaceAll(RegExp(r'^```(json)?', multiLine: true), '')
+      .replaceAll('```', '')
+      .trim();
+
+  static VoiceSpend _spendFromJson(String text,
+      {required String transcript, required VoiceSpend fallback}) {
+    try {
+      final j = jsonDecode(_stripFences(text)) as Map<String, dynamic>;
       final amount = (j['amount'] as num?)?.toDouble().abs();
       final catId = j['category_id']?.toString();
       final mode = j['payment_mode']?.toString();
